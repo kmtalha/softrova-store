@@ -6,6 +6,7 @@ import HeroCarousel from '@/components/HeroCarousel';
 import AppCard from '@/components/AppCard';
 import AppDetailModal from '@/components/AppDetailModal';
 import Footer from '@/components/Footer';
+import { DEFAULT_CATEGORIES } from '@/data/categories';
 import { INITIAL_APPS } from '@/data/apps';
 import { AppCategory, AppItem } from '@/types/app';
 import {
@@ -21,23 +22,44 @@ import {
 
 export default function StorefrontPage() {
   const [apps, setApps] = useState<AppItem[]>(INITIAL_APPS);
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<AppCategory>('All');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [activeModalApp, setActiveModalApp] = useState<AppItem | null>(null);
   const [sortBy, setSortBy] = useState<'featured' | 'rating' | 'name'>('featured');
 
-  // Load custom apps uploaded from /admin/upload
+  // Load custom apps, dynamic categories & spotlight overrides from admin
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('softrova_custom_apps');
-      if (stored) {
-        const customApps: AppItem[] = JSON.parse(stored);
-        if (Array.isArray(customApps) && customApps.length > 0) {
-          setApps([...customApps, ...INITIAL_APPS]);
+      // 1. Dynamic categories
+      const storedCategories = localStorage.getItem('softrova_categories');
+      if (storedCategories) {
+        const parsedCats = JSON.parse(storedCategories);
+        if (Array.isArray(parsedCats) && parsedCats.length > 0) {
+          setCategories(parsedCats);
         }
       }
+
+      // 2. Custom apps + Spotlight controls
+      const stored = localStorage.getItem('softrova_custom_apps');
+      const customApps: AppItem[] = stored ? JSON.parse(stored) : [];
+      let combined = Array.isArray(customApps) && customApps.length > 0
+        ? [...customApps, ...INITIAL_APPS]
+        : INITIAL_APPS;
+
+      // 3. Spotlight overrides
+      const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
+      if (storedSpotlight) {
+        const featMap: Record<string, boolean> = JSON.parse(storedSpotlight);
+        combined = combined.map((app) => ({
+          ...app,
+          featured: featMap[app.id] !== undefined ? featMap[app.id] : app.featured,
+        }));
+      }
+
+      setApps(combined);
     } catch (e) {
-      console.error('Failed to parse custom apps:', e);
+      console.error('Failed to parse store data:', e);
     }
   }, []);
 
@@ -134,6 +156,7 @@ export default function StorefrontPage() {
         onSearchChange={setSearchQuery}
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}
+        categories={categories}
       />
 
       {/* Semantic Main Body */}

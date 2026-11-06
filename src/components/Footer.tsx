@@ -49,7 +49,7 @@ export default function Footer() {
                   SOFTROVA
                 </span>
                 <span className="text-[10px] text-cyan-400 font-mono tracking-widest uppercase">
-                  Application Platform
+                  Solution Applications
                 </span>
               </div>
             </Link>

@@ -12,11 +12,14 @@ import {
 import { AppCategory } from '@/types/app';
 import { sanitizeString } from '@/lib/security';
 
+import { DEFAULT_CATEGORIES } from '@/data/categories';
+
 interface NavbarProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
-  selectedCategory: AppCategory;
-  onSelectCategory: (category: AppCategory) => void;
+  selectedCategory: string;
+  onSelectCategory: (category: string) => void;
+  categories?: string[];
 }
 
 export default function Navbar({
@@ -24,18 +27,9 @@ export default function Navbar({
   onSearchChange,
   selectedCategory,
   onSelectCategory,
+  categories = DEFAULT_CATEGORIES,
 }: NavbarProps) {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-
-  const categories: AppCategory[] = [
-    'All',
-    'AI',
-    'Productivity',
-    'Games',
-    'Tools',
-    'Security',
-    'Design',
-  ];
 
   const handleSearchInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const clean = sanitizeString(e.target.value, 100);
@@ -73,7 +67,7 @@ export default function Navbar({
                 </span>
               </div>
               <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium tracking-wide">
-                Next-Gen Applications
+                Solution Applications
               </span>
             </div>
           </Link>

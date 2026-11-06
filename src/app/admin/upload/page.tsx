@@ -12,7 +12,6 @@ import {
   ArrowLeft,
   Server,
   Cloud,
-  Code2,
   Copy,
   Check,
   Sparkles,
@@ -23,15 +22,20 @@ import {
   Eye,
   Key,
   AlertTriangle,
-  Settings,
   Share2,
-  Globe,
-  Mail
+  SlidersHorizontal,
+  Star,
+  Zap,
+  FolderPlus,
+  X
 } from 'lucide-react';
-import { AppCategory, AppItem } from '@/types/app';
+import { AppItem } from '@/types/app';
 import { SiteSettings } from '@/types/settings';
 import { DEFAULT_SITE_SETTINGS } from '@/data/settings';
+import { DEFAULT_CATEGORIES } from '@/data/categories';
+import { INITIAL_APPS } from '@/data/apps';
 import AppIcon from '@/components/AppIcon';
+import StarRating from '@/components/StarRating';
 import {
   sanitizeString,
   validateUploadFile,
@@ -48,8 +52,18 @@ export default function AdminUploadPage() {
   const [authError, setAuthError] = useState<string>('');
   const [lockoutSeconds, setLockoutSeconds] = useState<number>(0);
 
-  // Active Tab: 'publish' (Publish Apps) | 'settings' (Edit Socials & Footer)
-  const [activeAdminTab, setActiveAdminTab] = useState<'publish' | 'settings'>('publish');
+  // Active Admin Tab: 'publish' | 'spotlight' | 'categories' | 'settings'
+  const [activeAdminTab, setActiveAdminTab] = useState<'publish' | 'spotlight' | 'categories' | 'settings'>('publish');
+
+  // Dynamic Categories State
+  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  const [newCatInput, setNewCatInput] = useState<string>('');
+  const [catSuccessMsg, setCatSuccessMsg] = useState<string>('');
+
+  // Apps & Spotlight Management State
+  const [appsList, setAppsList] = useState<AppItem[]>(INITIAL_APPS);
+  const [spotlightMap, setSpotlightMap] = useState<Record<string, boolean>>({});
+  const [spotlightSuccessMsg, setSpotlightSuccessMsg] = useState<string>('');
 
   // File refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -84,7 +98,7 @@ export default function AdminUploadPage() {
     name: '',
     packageId: '',
     version: '1.0.0',
-    category: 'AI' as Exclude<AppCategory, 'All'>,
+    category: 'AI',
     price: 'Free',
     architecture: 'Universal x86_64 / arm64',
     shortDescription: '',
@@ -92,24 +106,49 @@ export default function AdminUploadPage() {
     permissions: 'Local Storage, Network Access',
   });
 
-  const categories: Exclude<AppCategory, 'All'>[] = [
-    'AI',
-    'Productivity',
-    'Games',
-    'Tools',
-    'Security',
-    'Design',
-  ];
-
-  // Check existing session & load site settings
+  // Check session, load categories, apps & spotlight map
   useEffect(() => {
     try {
       if (sessionStorage.getItem('softrova_admin_auth') === 'verified') {
         setIsAuthenticated(true);
       }
-      const stored = localStorage.getItem('softrova_site_settings');
-      if (stored) {
-        setSiteSettings(JSON.parse(stored));
+
+      // 1. Categories
+      const storedCats = localStorage.getItem('softrova_categories');
+      if (storedCats) {
+        const parsed = JSON.parse(storedCats);
+        if (Array.isArray(parsed) && parsed.length > 0) setCategories(parsed);
+      }
+
+      // 2. Apps
+      const storedCustom = localStorage.getItem('softrova_custom_apps');
+      const customApps: AppItem[] = storedCustom ? JSON.parse(storedCustom) : [];
+      const combined = Array.isArray(customApps) && customApps.length > 0
+        ? [...customApps, ...INITIAL_APPS]
+        : INITIAL_APPS;
+
+      // 3. Spotlight Map
+      const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
+      let currentMap: Record<string, boolean> = {};
+      if (storedSpotlight) {
+        currentMap = JSON.parse(storedSpotlight);
+      } else {
+        combined.forEach((a) => {
+          if (a.featured) currentMap[a.id] = true;
+        });
+      }
+      setSpotlightMap(currentMap);
+      setAppsList(
+        combined.map((a) => ({
+          ...a,
+          featured: currentMap[a.id] !== undefined ? currentMap[a.id] : a.featured,
+        }))
+      );
+
+      // 4. Site Settings
+      const storedSettings = localStorage.getItem('softrova_site_settings');
+      if (storedSettings) {
+        setSiteSettings(JSON.parse(storedSettings));
       }
     } catch {
       // Storage unavailable
@@ -135,6 +174,72 @@ export default function AdminUploadPage() {
       } catch {}
     } else {
       setAuthError('Invalid Master Access Key. Access Denied.');
+    }
+  };
+
+  // SPOTLIGHT CONTROLLER: Toggle Featured status on any app
+  const toggleSpotlight = (appId: string) => {
+    const isCurrentlyFeatured = !!spotlightMap[appId];
+    const newStatus = !isCurrentlyFeatured;
+    const updatedMap = { ...spotlightMap, [appId]: newStatus };
+
+    setSpotlightMap(updatedMap);
+    setAppsList((prev) =>
+      prev.map((a) => (a.id === appId ? { ...a, featured: newStatus } : a))
+    );
+
+    try {
+      localStorage.setItem('softrova_spotlight_map', JSON.stringify(updatedMap));
+      const targetApp = appsList.find((a) => a.id === appId);
+      const appName = targetApp ? targetApp.name : 'App';
+      setSpotlightSuccessMsg(
+        newStatus
+          ? `"${appName}" added to Softrova Spotlight Carousel!`
+          : `"${appName}" removed from Spotlight.`
+      );
+      setTimeout(() => setSpotlightSuccessMsg(''), 3000);
+    } catch (e) {
+      console.error('Failed to update spotlight:', e);
+    }
+  };
+
+  // CATEGORY MANAGER: Add New Category
+  const handleAddCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanCat = sanitizeString(newCatInput, 30).trim();
+    if (!cleanCat) return;
+
+    if (categories.some((c) => c.toLowerCase() === cleanCat.toLowerCase())) {
+      alert('This category already exists.');
+      return;
+    }
+
+    const updated = [...categories, cleanCat];
+    setCategories(updated);
+    setNewCatInput('');
+    try {
+      localStorage.setItem('softrova_categories', JSON.stringify(updated));
+      setCatSuccessMsg(`Category "${cleanCat}" successfully created!`);
+      setTimeout(() => setCatSuccessMsg(''), 3000);
+    } catch (err) {
+      console.error('Failed to save category:', err);
+    }
+  };
+
+  // CATEGORY MANAGER: Delete Category
+  const handleDeleteCategory = (catToDelete: string) => {
+    if (catToDelete === 'All') {
+      alert('Cannot delete the root "All" category.');
+      return;
+    }
+    const updated = categories.filter((c) => c !== catToDelete);
+    setCategories(updated);
+    try {
+      localStorage.setItem('softrova_categories', JSON.stringify(updated));
+      setCatSuccessMsg(`Category "${catToDelete}" removed.`);
+      setTimeout(() => setCatSuccessMsg(''), 3000);
+    } catch (err) {
+      console.error('Failed to delete category:', err);
     }
   };
 
@@ -258,7 +363,7 @@ export default function AdminUploadPage() {
       const newApp: AppItem = {
         id: `app-${Date.now()}`,
         name: cleanName,
-        tagline: sanitizeString(formData.shortDescription, 120) || 'Verified Softrova Application',
+        tagline: sanitizeString(formData.shortDescription, 120) || 'Verified Solution Application',
         shortDescription: sanitizeString(formData.shortDescription, 180) || 'Next-generation application built for performance and security.',
         fullDescription: sanitizeString(formData.fullDescription, 2000) || 'Published via Softrova Admin Portal. Verified clean binary with zero telemetry leak.',
         developer: 'Softrova Official',
@@ -282,7 +387,7 @@ export default function AdminUploadPage() {
               'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?w=1200&auto=format&fit=crop&q=80',
             ],
         features: [
-          'Verified Softrova Package',
+          'Verified Solution Application',
           'Client-side cryptographically signed',
           'Deployable to Cloudflare R2 / Global Edge',
           'Zero telemetry and privacy-preserving',
@@ -308,6 +413,7 @@ export default function AdminUploadPage() {
         const stored = localStorage.getItem('softrova_custom_apps');
         const customApps = stored ? JSON.parse(stored) : [];
         localStorage.setItem('softrova_custom_apps', JSON.stringify([newApp, ...customApps]));
+        setAppsList((prev) => [newApp, ...prev]);
       } catch (err) {
         console.error('Failed to save to localStorage:', err);
       }
@@ -445,6 +551,9 @@ async def upload_app(
     );
   }
 
+  // Count featured apps in spotlight
+  const spotlightCount = Object.values(spotlightMap).filter(Boolean).length;
+
   // 2. Authenticated Admin Dashboard
   return (
     <div className="min-h-screen bg-[#0B0D21] text-white bg-cyber-grid py-6 sm:py-10 px-3 sm:px-6 lg:px-8">
@@ -495,37 +604,63 @@ async def upload_app(
                 Softrova Administration Portal
               </h1>
               <p className="text-xs sm:text-sm text-slate-300">
-                Deploy applications and configure corporate footer & social channels.
+                Manage applications, control Softrova Spotlight, create categories, and customize corporate footer.
               </p>
             </div>
           </div>
 
-          {/* Admin Navigation Tabs */}
-          <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+          {/* Admin Navigation Tabs (4 Tabs) */}
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-800 overflow-x-auto no-scrollbar">
             <button
               type="button"
               onClick={() => setActiveAdminTab('publish')}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all ${
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all shrink-0 ${
                 activeAdminTab === 'publish'
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan'
                   : 'bg-[#15173B] text-slate-400 hover:text-white'
               }`}
             >
-              <UploadCloud size={16} />
-              <span>Publish Applications</span>
+              <UploadCloud size={15} />
+              <span>Publish Apps</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveAdminTab('spotlight')}
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all shrink-0 ${
+                activeAdminTab === 'spotlight'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan'
+                  : 'bg-[#15173B] text-slate-400 hover:text-white'
+              }`}
+            >
+              <Sparkles size={15} />
+              <span>Softrova Spotlight ({spotlightCount})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveAdminTab('categories')}
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all shrink-0 ${
+                activeAdminTab === 'categories'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan'
+                  : 'bg-[#15173B] text-slate-400 hover:text-white'
+              }`}
+            >
+              <FolderPlus size={15} />
+              <span>Categories ({categories.length - 1})</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActiveAdminTab('settings')}
-              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all ${
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all shrink-0 ${
                 activeAdminTab === 'settings'
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan'
                   : 'bg-[#15173B] text-slate-400 hover:text-white'
               }`}
             >
-              <Share2 size={16} />
-              <span>Social Links & Footer Settings</span>
+              <Share2 size={15} />
+              <span>Social & Footer</span>
             </button>
           </div>
         </div>
@@ -533,7 +668,6 @@ async def upload_app(
         {/* TAB 1: PUBLISH APPLICATION FORM */}
         {activeAdminTab === 'publish' && (
           <>
-            {/* Backend Architecture Guide Accordion */}
             <div className="flex justify-end">
               <button
                 type="button"
@@ -567,7 +701,6 @@ async def upload_app(
               </div>
             )}
 
-            {/* Upload Success Alert */}
             {uploadSuccess && publishedApp && (
               <div className="rounded-3xl p-5 sm:p-6 bg-gradient-to-r from-emerald-950/90 to-[#10122E] border border-emerald-500/60 shadow-neon-cyan space-y-4 animate-fade-in">
                 <div className="flex items-start justify-between gap-4">
@@ -584,7 +717,7 @@ async def upload_app(
                         <span>"{publishedApp.name}" Published!</span>
                       </h2>
                       <p className="text-xs text-emerald-300/90 mt-0.5">
-                        Your app is live in the storefront catalog.
+                        Your application is live in the storefront catalog under "{publishedApp.category}".
                       </p>
                     </div>
                   </div>
@@ -609,7 +742,6 @@ async def upload_app(
               </div>
             )}
 
-            {/* Main Publishing Form */}
             <form
               onSubmit={handleSubmit}
               className="rounded-3xl p-5 sm:p-8 bg-gradient-to-b from-[#1A1B41]/90 via-[#121435]/95 to-[#0B0D21] border border-cyan-400/25 shadow-3d-card space-y-6 sm:space-y-8"
@@ -819,7 +951,7 @@ async def upload_app(
                 )}
               </div>
 
-              {/* Section 3: Metadata Form */}
+              {/* Section 3: Metadata Form with Dynamic Categories */}
               <div className="space-y-4 pt-4 border-t border-slate-800">
                 <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 flex items-center justify-center text-[10px]">3</span>
@@ -870,21 +1002,31 @@ async def upload_app(
                     />
                   </div>
 
+                  {/* Dynamic Category Selector */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-300">
-                      Category *
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-slate-300">
+                        Category *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setActiveAdminTab('categories')}
+                        className="text-[10px] text-cyan-400 hover:text-white underline"
+                      >
+                        + Create New Category
+                      </button>
+                    </div>
                     <select
                       value={formData.category}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          category: e.target.value as Exclude<AppCategory, 'All'>,
+                          category: e.target.value,
                         })
                       }
                       className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
                     >
-                      {categories.map((c) => (
+                      {categories.filter((c) => c !== 'All').map((c) => (
                         <option key={c} value={c}>
                           {c}
                         </option>
@@ -957,7 +1099,160 @@ async def upload_app(
           </>
         )}
 
-        {/* TAB 2: STORE & SOCIAL MEDIA SETTINGS */}
+        {/* TAB 2: SOFTROVA SPOTLIGHT CONTROLLER */}
+        {activeAdminTab === 'spotlight' && (
+          <div className="rounded-3xl p-5 sm:p-8 bg-gradient-to-b from-[#1A1B41]/90 via-[#121435]/95 to-[#0B0D21] border border-cyan-400/25 shadow-3d-card space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                  <Sparkles size={20} className="text-amber-400" />
+                  <span>Softrova Spotlight Carousel Controller</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Choose which apps are featured on the top 3D rotating showcase carousel on the home page.
+                </p>
+              </div>
+
+              <span className="text-xs font-bold font-mono px-3 py-1.5 rounded-full bg-cyan-950/70 border border-cyan-500/40 text-cyan-300 self-start sm:self-auto">
+                {spotlightCount} App(s) Featured
+              </span>
+            </div>
+
+            {spotlightSuccessMsg && (
+              <div className="p-3.5 rounded-2xl bg-emerald-950/70 border border-emerald-500/60 text-emerald-300 text-xs flex items-center gap-2 shadow-neon-cyan animate-fade-in">
+                <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+                <span>{spotlightSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* List of all apps with Spotlight Toggle */}
+            <div className="space-y-3">
+              {appsList.map((app) => {
+                const isFeatured = !!spotlightMap[app.id];
+                return (
+                  <div
+                    key={app.id}
+                    className={`flex items-center justify-between p-3.5 sm:p-4 rounded-2xl border transition-all ${
+                      isFeatured
+                        ? 'bg-[#15173B] border-amber-400/50 shadow-[0_0_20px_rgba(255,215,0,0.15)]'
+                        : 'bg-[#10122E]/80 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0 pr-3">
+                      <AppIcon
+                        iconUrl={app.iconUrl}
+                        iconType={app.iconType}
+                        iconBg={app.iconBg}
+                        size="sm"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-white truncate">
+                            {app.name}
+                          </h3>
+                          <span className="text-[10px] text-cyan-300 font-mono px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/30">
+                            {app.category}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 truncate">
+                          {app.shortDescription}
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleSpotlight(app.id)}
+                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all ${
+                        isFeatured
+                          ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-neon-yellow hover:scale-105'
+                          : 'bg-[#10122E] border border-slate-700 text-slate-400 hover:text-white hover:border-cyan-400'
+                      }`}
+                    >
+                      <Star size={13} className={isFeatured ? 'fill-slate-950' : ''} />
+                      <span>{isFeatured ? 'Featured ★' : 'Feature in Spotlight'}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: DYNAMIC CATEGORY CREATOR & MANAGER */}
+        {activeAdminTab === 'categories' && (
+          <div className="rounded-3xl p-5 sm:p-8 bg-gradient-to-b from-[#1A1B41]/90 via-[#121435]/95 to-[#0B0D21] border border-cyan-400/25 shadow-3d-card space-y-6">
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                <FolderPlus size={20} className="text-cyan-400" />
+                <span>Storefront Category Creator & Manager</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Create new application categories that appear on the storefront filter bar and inside the app uploader.
+              </p>
+            </div>
+
+            {catSuccessMsg && (
+              <div className="p-3.5 rounded-2xl bg-emerald-950/70 border border-emerald-500/60 text-emerald-300 text-xs flex items-center gap-2 shadow-neon-cyan animate-fade-in">
+                <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+                <span>{catSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Create New Category Form */}
+            <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row items-stretch gap-3">
+              <input
+                type="text"
+                required
+                maxLength={30}
+                placeholder="Enter new category name (e.g. Fintech, Cloud, Web3, Creative)..."
+                value={newCatInput}
+                onChange={(e) => setNewCatInput(e.target.value)}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+              />
+              <button
+                type="submit"
+                className="px-6 py-2.5 rounded-xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+              >
+                <Plus size={16} />
+                <span>Create Category</span>
+              </button>
+            </form>
+
+            {/* Active Categories Pills Grid */}
+            <div className="space-y-3 pt-4 border-t border-slate-800">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+                Active Store Categories ({categories.length})
+              </h3>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                {categories.map((cat) => {
+                  const isRoot = cat === 'All';
+                  return (
+                    <div
+                      key={cat}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#10122E] border border-cyan-500/30 text-xs font-semibold text-white shadow-sm"
+                    >
+                      <span>{cat}</span>
+                      {!isRoot && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(cat)}
+                          title={`Delete ${cat} category`}
+                          className="p-1 rounded-md text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition-colors"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: STORE & SOCIAL MEDIA SETTINGS */}
         {activeAdminTab === 'settings' && (
           <form
             onSubmit={handleSaveSettings}

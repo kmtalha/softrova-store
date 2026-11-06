@@ -1,11 +1,4 @@
-export type AppCategory =
-  | 'All'
-  | 'AI'
-  | 'Productivity'
-  | 'Games'
-  | 'Tools'
-  | 'Security'
-  | 'Design';
+export type AppCategory = string;
 
 export interface AppChangelog {
   version: string;
@@ -31,7 +24,7 @@ export interface AppItem {
   verified: boolean;
   rating: number;
   reviewsCount: number;
-  category: Exclude<AppCategory, 'All'>;
+  category: string;
   badge?: 'Editor\'s Choice' | 'Trending' | 'New' | 'Featured' | 'Softrova Original';
   featured?: boolean;
   heroHeadline?: string;
