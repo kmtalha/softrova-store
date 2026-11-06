@@ -118,9 +118,36 @@ export default function StorefrontPage() {
             setDownloadingAppId(null);
             setDownloadProgress(0);
 
-            // Trigger real download if valid URL provided
+            // Trigger background download directly in the same page (no new tab or blank screen)
             if (app.downloadUrl && (app.downloadUrl.startsWith('https://') || app.downloadUrl.startsWith('http://'))) {
-              window.open(app.downloadUrl, '_blank', 'noopener,noreferrer');
+              let downloadUrl = app.downloadUrl;
+              const extMatch = downloadUrl.match(/\.(apk|zip|exe|dmg|tar\.gz|deb)(\?.*)?$/i);
+              const ext = extMatch ? extMatch[1] : 'apk';
+              const cleanFilename = `${app.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_v${app.version}.${ext}`;
+
+              if (downloadUrl.includes('supabase.co/storage/v1/object/public/')) {
+                const sep = downloadUrl.includes('?') ? '&' : '?';
+                downloadUrl = `${downloadUrl}${sep}download=${encodeURIComponent(cleanFilename)}`;
+              }
+
+              // Background invisible iframe download keeps user on current page
+              const iframe = document.createElement('iframe');
+              iframe.style.position = 'fixed';
+              iframe.style.top = '-9999px';
+              iframe.style.left = '-9999px';
+              iframe.style.width = '1px';
+              iframe.style.height = '1px';
+              iframe.style.opacity = '0';
+              iframe.style.pointerEvents = 'none';
+              iframe.style.border = 'none';
+              iframe.src = downloadUrl;
+              document.body.appendChild(iframe);
+
+              setTimeout(() => {
+                try {
+                  document.body.removeChild(iframe);
+                } catch {}
+              }, 30000);
             }
           }, 600);
           return 100;
