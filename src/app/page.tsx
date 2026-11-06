@@ -104,16 +104,17 @@ export default function StorefrontPage() {
   // Download simulation
   const [downloadingAppId, setDownloadingAppId] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [installedAppBanner, setInstalledAppBanner] = useState<AppItem | null>(null);
 
-  // Direct Background Download Engine (100% same page, no new tabs, no blank screen)
+  // Direct Clean Download Engine (Downloads direct APK from source, avoids blob warning)
   const handleDownload = async (app: AppItem) => {
     if (downloadingAppId) return;
     setDownloadingAppId(app.id);
-    setDownloadProgress(15);
+    setDownloadProgress(20);
 
     const interval = setInterval(() => {
       setDownloadProgress((prev) => {
-        if (prev >= 85) return 85;
+        if (prev >= 90) return 90;
         return prev + 15;
       });
     }, 150);
@@ -131,48 +132,26 @@ export default function StorefrontPage() {
     const ext = extMatch ? extMatch[1] : 'apk';
     const cleanFilename = `${app.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_v${app.version}.${ext}`;
 
-    // Format Supabase Storage URL with download parameter to enforce Content-Disposition: attachment
+    // Format Supabase Storage URL with direct download parameter
     let directUrl = url;
     if (directUrl.includes('supabase.co/storage/v1/object/public/')) {
       const sep = directUrl.includes('?') ? '&' : '?';
       directUrl = `${directUrl}${sep}download=${encodeURIComponent(cleanFilename)}`;
     }
 
-    const triggerIframeDownload = () => {
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = directUrl;
-      document.body.appendChild(iframe);
-      setTimeout(() => {
-        try {
-          document.body.removeChild(iframe);
-        } catch {}
-      }, 30000);
-    };
-
-    try {
-      const response = await fetch(directUrl);
-      if (response.ok) {
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = cleanFilename;
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-          try {
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(blobUrl);
-          } catch {}
-        }, 1000);
-      } else {
-        triggerIframeDownload();
-      }
-    } catch {
-      // Fallback: Invisible iframe triggers attachment download without navigating or blank page
-      triggerIframeDownload();
-    }
+    // Trigger direct native download via hidden element
+    // Direct URL download prevents the browser from showing the scary "from blob:..." alert
+    const link = document.createElement('a');
+    link.href = directUrl;
+    link.setAttribute('download', cleanFilename);
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      try {
+        document.body.removeChild(link);
+      } catch {}
+    }, 2000);
 
     setTimeout(() => {
       clearInterval(interval);
@@ -180,8 +159,9 @@ export default function StorefrontPage() {
       setTimeout(() => {
         setDownloadingAppId(null);
         setDownloadProgress(0);
-      }, 800);
-    }, 1000);
+        setInstalledAppBanner(app);
+      }, 700);
+    }, 1200);
   };
 
   // Schema.org ItemList for Google App Store Carousel indexing
@@ -380,6 +360,39 @@ export default function StorefrontPage() {
         isDownloading={downloadingAppId === activeModalApp?.id}
         downloadProgress={downloadProgress}
       />
+
+      {/* Mobile Download Complete Installation Helper Banner */}
+      {installedAppBanner && (
+        <aside
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-11/12 max-w-md p-4 rounded-2xl bg-[#0D0F24]/95 border border-cyan-400/50 shadow-neon-cyan backdrop-blur-md flex items-center justify-between gap-3 animate-fade-in"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <AppIcon
+              iconUrl={installedAppBanner.iconUrl}
+              iconType={installedAppBanner.iconType}
+              iconBg={installedAppBanner.iconBg}
+              size="sm"
+            />
+            <div className="min-w-0">
+              <h4 className="text-xs font-bold text-white truncate">
+                {installedAppBanner.name} Downloaded!
+              </h4>
+              <p className="text-[11px] text-cyan-300">
+                Tap <strong>&ldquo;Open&rdquo;</strong> in your browser bar or notifications to Install.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setInstalledAppBanner(null)}
+            className="p-1 rounded-lg text-slate-400 hover:text-white shrink-0 text-xs"
+          >
+            ✕
+          </button>
+        </aside>
+      )}
 
       {/* Semantic Footer */}
       <Footer />

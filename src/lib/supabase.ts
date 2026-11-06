@@ -266,11 +266,17 @@ export async function uploadToSupabaseStorage(
 
   try {
     const cleanPath = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+    let contentType = file.type;
+    if (bucketName === 'app-binaries' || filename.toLowerCase().endsWith('.apk')) {
+      contentType = 'application/vnd.android.package-archive';
+    }
+
     const { data, error } = await supabase.storage
       .from(bucketName)
       .upload(cleanPath, file, {
         cacheControl: '3600',
         upsert: true,
+        contentType: contentType || 'application/octet-stream',
       });
 
     if (error || !data) {
