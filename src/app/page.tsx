@@ -25,6 +25,21 @@ export default function StorefrontPage() {
   const [activeModalApp, setActiveModalApp] = useState<AppItem | null>(null);
   const [sortBy, setSortBy] = useState<'featured' | 'rating' | 'name'>('featured');
 
+  // Load custom apps uploaded from /admin/upload
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem('softrova_custom_apps');
+      if (stored) {
+        const customApps: AppItem[] = JSON.parse(stored);
+        if (Array.isArray(customApps) && customApps.length > 0) {
+          setApps([...customApps, ...INITIAL_APPS]);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse custom apps:', e);
+    }
+  }, []);
+
   // Simulated download progress state
   const [downloadingAppId, setDownloadingAppId] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);

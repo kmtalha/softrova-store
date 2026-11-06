@@ -102,6 +102,7 @@ export default function AppDetailModal({
             <AppIcon
               iconType={app.iconType}
               iconBg={app.iconBg}
+              iconUrl={app.iconUrl}
               size="lg"
               glowColor={app.accentGlow}
             />

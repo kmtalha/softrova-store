@@ -148,6 +148,7 @@ export default function HeroCarousel({
                   <AppIcon
                     iconType={currentApp.iconType}
                     iconBg={currentApp.iconBg}
+                    iconUrl={currentApp.iconUrl}
                     size="md"
                     glowColor={currentApp.accentGlow}
                   />

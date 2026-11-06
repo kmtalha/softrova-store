@@ -110,6 +110,7 @@ export default function AppCard({
             <AppIcon
               iconType={app.iconType}
               iconBg={app.iconBg}
+              iconUrl={app.iconUrl}
               size="md"
               glowColor={app.accentGlow}
               className="transform-gpu transition-transform duration-300 group-hover:scale-105"

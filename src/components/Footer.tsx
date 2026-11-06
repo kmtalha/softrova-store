@@ -16,8 +16,12 @@ export default function Footer() {
           {/* Brand Col */}
           <div className="md:col-span-1 space-y-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#1A1B41] to-[#00E5FF]/30 border border-cyan-400/40 flex items-center justify-center font-bold text-white text-sm">
-                S
+              <div className="w-9 h-9 rounded-xl overflow-hidden border border-cyan-400/40 shadow-neon-cyan shrink-0">
+                <img
+                  src="/softrova-logo.png"
+                  alt="Softrova Logo"
+                  className="w-full h-full object-cover"
+                />
               </div>
               <span className="text-base font-extrabold text-white tracking-wider">
                 SOFTROVA

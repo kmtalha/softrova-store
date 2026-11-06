@@ -42,6 +42,7 @@ export interface AppItem {
   updatedAt: string;
   iconBg: string;
   iconType: string;
+  iconUrl?: string;
   accentGlow: string;
   screenshots: string[];
   features: string[];

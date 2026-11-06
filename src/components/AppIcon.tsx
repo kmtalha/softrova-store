@@ -15,16 +15,18 @@ import {
 } from 'lucide-react';
 
 interface AppIconProps {
-  iconType: string;
-  iconBg: string;
+  iconType?: string;
+  iconBg?: string;
+  iconUrl?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   glowColor?: string;
   className?: string;
 }
 
 export default function AppIcon({
-  iconType,
-  iconBg,
+  iconType = 'sparkles',
+  iconBg = 'from-cyan-500 to-blue-600',
+  iconUrl,
   size = 'md',
   glowColor,
   className = '',
@@ -44,6 +46,16 @@ export default function AppIcon({
   }[size];
 
   const renderIcon = () => {
+    if (iconUrl) {
+      return (
+        <img
+          src={iconUrl}
+          alt="App Icon"
+          className="w-full h-full object-cover rounded-[inherit]"
+        />
+      );
+    }
+
     const props = { size: iconSizes, className: 'text-white drop-shadow-md' };
     switch (iconType) {
       case 'sparkles':
@@ -71,21 +83,31 @@ export default function AppIcon({
 
   return (
     <div
-      className={`relative inline-flex items-center justify-center bg-gradient-to-br ${iconBg} ${sizeClasses} shadow-lg transition-transform duration-300 transform-gpu ${className}`}
+      className={`relative inline-flex items-center justify-center overflow-hidden bg-gradient-to-br ${iconBg} ${sizeClasses} shadow-lg transition-transform duration-300 transform-gpu ${
+        iconUrl ? '!p-0' : ''
+      } ${className}`}
       style={{
         boxShadow: glowColor
           ? `0 12px 30px -4px ${glowColor}, inset 0 1px 1px 0 rgba(255,255,255,0.4)`
           : '0 12px 25px -4px rgba(0, 229, 255, 0.35), inset 0 1px 1px 0 rgba(255,255,255,0.4)',
       }}
     >
+      {/* Center Icon or Uploaded Image */}
+      {iconUrl ? (
+        <img
+          src={iconUrl}
+          alt="App Icon"
+          className="w-full h-full object-cover rounded-[inherit]"
+        />
+      ) : (
+        <div className="relative z-10 transition-transform duration-300 group-hover:scale-110">
+          {renderIcon()}
+        </div>
+      )}
+
       {/* 3D Glass Sheen Highlight */}
       <div className="absolute inset-0 rounded-[inherit] bg-gradient-to-t from-transparent via-white/10 to-white/30 pointer-events-none" />
       <div className="absolute top-0 inset-x-0 h-1/2 rounded-t-[inherit] bg-gradient-to-b from-white/25 to-transparent pointer-events-none opacity-80" />
-      
-      {/* Center Icon */}
-      <div className="relative z-10 transition-transform duration-300 group-hover:scale-110">
-        {renderIcon()}
-      </div>
     </div>
   );
 }

@@ -51,24 +51,12 @@ export default function Navbar({
             href="/"
             className="flex items-center gap-3.5 group shrink-0 focus:outline-none"
           >
-            <div className="relative flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-br from-[#1A1B41] via-[#10122E] to-[#0B0D21] border border-cyan-400/40 shadow-neon-cyan transition-all duration-300 group-hover:border-cyan-300 group-hover:scale-105">
-              {!logoError ? (
-                <Image
-                  src="/softrova-logo.png"
-                  alt="Softrova Brand Logo"
-                  width={34}
-                  height={34}
-                  className="object-contain"
-                  onError={() => setLogoError(true)}
-                />
-              ) : (
-                <div className="relative flex items-center justify-center">
-                  <span className="text-xl font-black bg-gradient-to-r from-cyan-300 via-white to-amber-300 bg-clip-text text-transparent">
-                    S
-                  </span>
-                  <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                </div>
-              )}
+            <div className="relative flex items-center justify-center w-12 h-12 rounded-2xl overflow-hidden bg-[#1A1B41] border border-cyan-400/40 shadow-neon-cyan transition-all duration-300 group-hover:border-cyan-300 group-hover:scale-105 group-hover:shadow-neon-cyan-lg">
+              <img
+                src="/softrova-logo.png"
+                alt="Softrova Brand Logo"
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+              />
             </div>
 
             <div className="flex flex-col">
