@@ -9,6 +9,7 @@ import Footer from '@/components/Footer';
 import { DEFAULT_CATEGORIES } from '@/data/categories';
 import { INITIAL_APPS } from '@/data/apps';
 import { AppCategory, AppItem } from '@/types/app';
+import { fetchSupabaseApps, fetchSupabaseCategories } from '@/lib/supabase';
 import {
   Sparkles,
   Zap,
@@ -28,39 +29,54 @@ export default function StorefrontPage() {
   const [activeModalApp, setActiveModalApp] = useState<AppItem | null>(null);
   const [sortBy, setSortBy] = useState<'featured' | 'rating' | 'name'>('featured');
 
-  // Load custom apps, dynamic categories & spotlight overrides from admin
+  // Load custom apps, dynamic categories & spotlight overrides from Supabase or localStorage
   useEffect(() => {
-    try {
-      // 1. Dynamic categories
-      const storedCategories = localStorage.getItem('softrova_categories');
-      if (storedCategories) {
-        const parsedCats = JSON.parse(storedCategories);
-        if (Array.isArray(parsedCats) && parsedCats.length > 0) {
-          setCategories(parsedCats);
+    async function loadStoreData() {
+      try {
+        // 1. Try loading categories from Supabase
+        const sbCats = await fetchSupabaseCategories();
+        if (sbCats && sbCats.length > 0) {
+          setCategories(sbCats);
+        } else {
+          const storedCategories = localStorage.getItem('softrova_categories');
+          if (storedCategories) {
+            const parsedCats = JSON.parse(storedCategories);
+            if (Array.isArray(parsedCats) && parsedCats.length > 0) {
+              setCategories(parsedCats);
+            }
+          }
         }
+
+        // 2. Try loading apps from Supabase
+        const sbApps = await fetchSupabaseApps();
+        if (sbApps && sbApps.length > 0) {
+          setApps(sbApps);
+          return;
+        }
+
+        // Fallback to local storage & initial apps
+        const stored = localStorage.getItem('softrova_custom_apps');
+        const customApps: AppItem[] = stored ? JSON.parse(stored) : [];
+        let combined = Array.isArray(customApps) && customApps.length > 0
+          ? [...customApps, ...INITIAL_APPS]
+          : INITIAL_APPS;
+
+        const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
+        if (storedSpotlight) {
+          const featMap: Record<string, boolean> = JSON.parse(storedSpotlight);
+          combined = combined.map((app) => ({
+            ...app,
+            featured: featMap[app.id] !== undefined ? featMap[app.id] : app.featured,
+          }));
+        }
+
+        setApps(combined);
+      } catch (e) {
+        console.error('Failed to parse store data:', e);
       }
-
-      // 2. Custom apps + Spotlight controls
-      const stored = localStorage.getItem('softrova_custom_apps');
-      const customApps: AppItem[] = stored ? JSON.parse(stored) : [];
-      let combined = Array.isArray(customApps) && customApps.length > 0
-        ? [...customApps, ...INITIAL_APPS]
-        : INITIAL_APPS;
-
-      // 3. Spotlight overrides
-      const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
-      if (storedSpotlight) {
-        const featMap: Record<string, boolean> = JSON.parse(storedSpotlight);
-        combined = combined.map((app) => ({
-          ...app,
-          featured: featMap[app.id] !== undefined ? featMap[app.id] : app.featured,
-        }));
-      }
-
-      setApps(combined);
-    } catch (e) {
-      console.error('Failed to parse store data:', e);
     }
+
+    loadStoreData();
   }, []);
 
   // Filter & Search Logic

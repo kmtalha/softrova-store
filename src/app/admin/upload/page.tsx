@@ -27,6 +27,7 @@ import {
   Star,
   Zap,
   FolderPlus,
+  Database,
   X
 } from 'lucide-react';
 import { AppItem } from '@/types/app';
@@ -34,6 +35,18 @@ import { SiteSettings } from '@/types/settings';
 import { DEFAULT_SITE_SETTINGS } from '@/data/settings';
 import { DEFAULT_CATEGORIES } from '@/data/categories';
 import { INITIAL_APPS } from '@/data/apps';
+import { SUPABASE_SCHEMA_SQL } from '@/data/supabaseSchema';
+import {
+  getSupabase,
+  isSupabaseConfigured,
+  fetchSupabaseApps,
+  insertSupabaseApp,
+  updateSupabaseSpotlight,
+  fetchSupabaseCategories,
+  insertSupabaseCategory,
+  deleteSupabaseCategory,
+  uploadToSupabaseStorage,
+} from '@/lib/supabase';
 import AppIcon from '@/components/AppIcon';
 import StarRating from '@/components/StarRating';
 import {
@@ -49,11 +62,20 @@ export default function AdminUploadPage() {
   // Authentication Gate State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [passcode, setPasscode] = useState<string>('');
+  const [emailInput, setEmailInput] = useState<string>('');
+  const [passwordInput, setPasswordInput] = useState<string>('');
+  const [adminUserEmail, setAdminUserEmail] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
   const [lockoutSeconds, setLockoutSeconds] = useState<number>(0);
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+  const [authMode, setAuthMode] = useState<'passcode' | 'supabase'>('passcode');
 
-  // Active Admin Tab: 'publish' | 'spotlight' | 'categories' | 'settings'
-  const [activeAdminTab, setActiveAdminTab] = useState<'publish' | 'spotlight' | 'categories' | 'settings'>('publish');
+  // Active Admin Tab: 'publish' | 'spotlight' | 'categories' | 'settings' | 'supabase'
+  const [activeAdminTab, setActiveAdminTab] = useState<'publish' | 'spotlight' | 'categories' | 'settings' | 'supabase'>('publish');
+
+  // Supabase Configuration Status
+  const [supabaseConnected, setSupabaseConnected] = useState<boolean>(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Dynamic Categories State
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
@@ -79,6 +101,7 @@ export default function AdminUploadPage() {
   // Images state
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string>('');
+  const [screenshotsFiles, setScreenshotsFiles] = useState<File[]>([]);
   const [screenshotsPreviews, setScreenshotsPreviews] = useState<string[]>([]);
   const [imageError, setImageError] = useState<string>('');
 
@@ -108,58 +131,118 @@ export default function AdminUploadPage() {
 
   // Check session, load categories, apps & spotlight map
   useEffect(() => {
-    try {
-      if (sessionStorage.getItem('softrova_admin_auth') === 'verified') {
-        setIsAuthenticated(true);
-      }
+    async function initAdmin() {
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          setSupabaseConnected(true);
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            setIsAuthenticated(true);
+            setAdminUserEmail(session.user.email || 'Admin');
+          }
 
-      // 1. Categories
-      const storedCats = localStorage.getItem('softrova_categories');
-      if (storedCats) {
-        const parsed = JSON.parse(storedCats);
-        if (Array.isArray(parsed) && parsed.length > 0) setCategories(parsed);
-      }
+          supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.user) {
+              setIsAuthenticated(true);
+              setAdminUserEmail(session.user.email || 'Admin');
+            }
+          });
 
-      // 2. Apps
-      const storedCustom = localStorage.getItem('softrova_custom_apps');
-      const customApps: AppItem[] = storedCustom ? JSON.parse(storedCustom) : [];
-      const combined = Array.isArray(customApps) && customApps.length > 0
-        ? [...customApps, ...INITIAL_APPS]
-        : INITIAL_APPS;
+          // Fetch Supabase Apps
+          const sbApps = await fetchSupabaseApps();
+          if (sbApps && sbApps.length > 0) {
+            setAppsList(sbApps);
+            const map: Record<string, boolean> = {};
+            sbApps.forEach((a) => {
+              if (a.featured) map[a.id] = true;
+            });
+            setSpotlightMap(map);
+          }
 
-      // 3. Spotlight Map
-      const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
-      let currentMap: Record<string, boolean> = {};
-      if (storedSpotlight) {
-        currentMap = JSON.parse(storedSpotlight);
-      } else {
-        combined.forEach((a) => {
-          if (a.featured) currentMap[a.id] = true;
-        });
-      }
-      setSpotlightMap(currentMap);
-      setAppsList(
-        combined.map((a) => ({
-          ...a,
-          featured: currentMap[a.id] !== undefined ? currentMap[a.id] : a.featured,
-        }))
-      );
+          // Fetch Supabase Categories
+          const sbCats = await fetchSupabaseCategories();
+          if (sbCats && sbCats.length > 0) {
+            setCategories(sbCats);
+          }
+        }
 
-      // 4. Site Settings
-      const storedSettings = localStorage.getItem('softrova_site_settings');
-      if (storedSettings) {
-        setSiteSettings(JSON.parse(storedSettings));
+        if (sessionStorage.getItem('softrova_admin_auth') === 'verified') {
+          setIsAuthenticated(true);
+        }
+
+        // 1. Fallback Categories
+        const storedCats = localStorage.getItem('softrova_categories');
+        if (storedCats) {
+          const parsed = JSON.parse(storedCats);
+          if (Array.isArray(parsed) && parsed.length > 0) setCategories(parsed);
+        }
+
+        // 2. Fallback Apps
+        const storedCustom = localStorage.getItem('softrova_custom_apps');
+        const customApps: AppItem[] = storedCustom ? JSON.parse(storedCustom) : [];
+        const combined = Array.isArray(customApps) && customApps.length > 0
+          ? [...customApps, ...INITIAL_APPS]
+          : INITIAL_APPS;
+
+        // 3. Fallback Spotlight Map
+        const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
+        let currentMap: Record<string, boolean> = {};
+        if (storedSpotlight) {
+          currentMap = JSON.parse(storedSpotlight);
+        } else {
+          combined.forEach((a) => {
+            if (a.featured) currentMap[a.id] = true;
+          });
+        }
+        setSpotlightMap((prev) => (Object.keys(prev).length > 0 ? prev : currentMap));
+        setAppsList((prev) =>
+          prev.length > INITIAL_APPS.length
+            ? prev
+            : combined.map((a) => ({
+                ...a,
+                featured: currentMap[a.id] !== undefined ? currentMap[a.id] : a.featured,
+              }))
+        );
+
+        // 4. Site Settings
+        const storedSettings = localStorage.getItem('softrova_site_settings');
+        if (storedSettings) {
+          setSiteSettings(JSON.parse(storedSettings));
+        }
+      } catch (err) {
+        console.error('Init admin error:', err);
       }
-    } catch {
-      // Storage unavailable
     }
+
+    initAdmin();
   }, []);
 
-  // Passcode verification
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  // Auth submission: Supabase Email/Password or Master Key
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
 
+    const supabase = getSupabase();
+    if (authMode === 'supabase' && supabase && emailInput.trim() && passwordInput) {
+      setIsLoggingIn(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: emailInput.trim(),
+        password: passwordInput,
+      });
+      setIsLoggingIn(false);
+      if (error) {
+        setAuthError(error.message);
+        return;
+      }
+      if (data?.session) {
+        setIsAuthenticated(true);
+        setAdminUserEmail(data.user.email || 'Admin');
+        return;
+      }
+    }
+
+    // Master Passcode verification
     const rateCheck = checkRateLimit('admin_auth', 5, 30000);
     if (!rateCheck.allowed) {
       setLockoutSeconds(rateCheck.waitSeconds || 30);
@@ -177,8 +260,20 @@ export default function AdminUploadPage() {
     }
   };
 
+  const handleLogout = async () => {
+    const supabase = getSupabase();
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+    try {
+      sessionStorage.removeItem('softrova_admin_auth');
+    } catch {}
+    setIsAuthenticated(false);
+    setAdminUserEmail('');
+  };
+
   // SPOTLIGHT CONTROLLER: Toggle Featured status on any app
-  const toggleSpotlight = (appId: string) => {
+  const toggleSpotlight = async (appId: string) => {
     const isCurrentlyFeatured = !!spotlightMap[appId];
     const newStatus = !isCurrentlyFeatured;
     const updatedMap = { ...spotlightMap, [appId]: newStatus };
@@ -187,6 +282,11 @@ export default function AdminUploadPage() {
     setAppsList((prev) =>
       prev.map((a) => (a.id === appId ? { ...a, featured: newStatus } : a))
     );
+
+    // Sync to Supabase
+    if (supabaseConnected) {
+      await updateSupabaseSpotlight(appId, newStatus);
+    }
 
     try {
       localStorage.setItem('softrova_spotlight_map', JSON.stringify(updatedMap));
@@ -204,7 +304,7 @@ export default function AdminUploadPage() {
   };
 
   // CATEGORY MANAGER: Add New Category
-  const handleAddCategory = (e: React.FormEvent) => {
+  const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCat = sanitizeString(newCatInput, 30).trim();
     if (!cleanCat) return;
@@ -217,6 +317,12 @@ export default function AdminUploadPage() {
     const updated = [...categories, cleanCat];
     setCategories(updated);
     setNewCatInput('');
+
+    // Sync to Supabase
+    if (supabaseConnected) {
+      await insertSupabaseCategory(cleanCat);
+    }
+
     try {
       localStorage.setItem('softrova_categories', JSON.stringify(updated));
       setCatSuccessMsg(`Category "${cleanCat}" successfully created!`);
@@ -227,13 +333,19 @@ export default function AdminUploadPage() {
   };
 
   // CATEGORY MANAGER: Delete Category
-  const handleDeleteCategory = (catToDelete: string) => {
+  const handleDeleteCategory = async (catToDelete: string) => {
     if (catToDelete === 'All') {
       alert('Cannot delete the root "All" category.');
       return;
     }
     const updated = categories.filter((c) => c !== catToDelete);
     setCategories(updated);
+
+    // Sync to Supabase
+    if (supabaseConnected) {
+      await deleteSupabaseCategory(catToDelete);
+    }
+
     try {
       localStorage.setItem('softrova_categories', JSON.stringify(updated));
       setCatSuccessMsg(`Category "${catToDelete}" removed.`);
@@ -326,12 +438,14 @@ export default function AdminUploadPage() {
     setImageError('');
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
+      const validFiles: File[] = [];
       files.forEach((file) => {
         const validation = validateUploadImage(file);
         if (!validation.valid) {
           setImageError(validation.error || 'Invalid screenshot format.');
           return;
         }
+        validFiles.push(file);
 
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -341,15 +455,17 @@ export default function AdminUploadPage() {
         };
         reader.readAsDataURL(file);
       });
+      setScreenshotsFiles((prev) => [...prev, ...validFiles]);
     }
   };
 
   const removeScreenshot = (indexToRemove: number) => {
     setScreenshotsPreviews((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    setScreenshotsFiles((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   // Form submission: App Upload
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = sanitizeString(formData.name, 80);
     if (!cleanName) {
@@ -359,7 +475,41 @@ export default function AdminUploadPage() {
 
     setIsSubmitting(true);
 
-    setTimeout(() => {
+    try {
+      let finalIconUrl = iconPreview || undefined;
+      const finalScreenshots: string[] = [...screenshotsPreviews];
+      let finalDownloadUrl = '#';
+
+      // 1. If Supabase is connected, upload assets directly to Supabase Storage Buckets
+      if (supabaseConnected) {
+        if (iconFile) {
+          const uploadedIconUrl = await uploadToSupabaseStorage('app-icons', iconFile, `${cleanName.toLowerCase()}-icon.${iconFile.name.split('.').pop()}`);
+          if (uploadedIconUrl) {
+            finalIconUrl = uploadedIconUrl;
+          }
+        }
+
+        if (screenshotsFiles.length > 0) {
+          const uploadedUrls: string[] = [];
+          for (let i = 0; i < screenshotsFiles.length; i++) {
+            const file = screenshotsFiles[i];
+            const url = await uploadToSupabaseStorage('app-screenshots', file, `${cleanName.toLowerCase()}-screen-${i + 1}.${file.name.split('.').pop()}`);
+            if (url) uploadedUrls.push(url);
+          }
+          if (uploadedUrls.length > 0) {
+            finalScreenshots.length = 0;
+            finalScreenshots.push(...uploadedUrls);
+          }
+        }
+
+        if (selectedFile) {
+          const uploadedBinaryUrl = await uploadToSupabaseStorage('app-binaries', selectedFile, `${cleanName.toLowerCase()}-v${formData.version}.${selectedFile.name.split('.').pop()}`);
+          if (uploadedBinaryUrl) {
+            finalDownloadUrl = uploadedBinaryUrl;
+          }
+        }
+      }
+
       const newApp: AppItem = {
         id: `app-${Date.now()}`,
         name: cleanName,
@@ -378,10 +528,10 @@ export default function AdminUploadPage() {
         updatedAt: 'Just now',
         iconBg: 'from-cyan-400 via-blue-600 to-indigo-950',
         iconType: 'sparkles',
-        iconUrl: iconPreview || undefined,
+        iconUrl: finalIconUrl,
         accentGlow: 'rgba(0, 229, 255, 0.6)',
-        screenshots: screenshotsPreviews.length > 0
-          ? screenshotsPreviews
+        screenshots: finalScreenshots.length > 0
+          ? finalScreenshots
           : [
               'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80',
               'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?w=1200&auto=format&fit=crop&q=80',
@@ -389,7 +539,7 @@ export default function AdminUploadPage() {
         features: [
           'Verified Solution Application',
           'Client-side cryptographically signed',
-          'Deployable to Cloudflare R2 / Global Edge',
+          'Deployable to Cloudflare Edge',
           'Zero telemetry and privacy-preserving',
         ],
         changelog: [
@@ -406,9 +556,15 @@ export default function AdminUploadPage() {
           sha256: fileHash || '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
           permissions: formData.permissions.split(',').map((p) => sanitizeString(p, 40)),
         },
-        downloadUrl: '#',
+        downloadUrl: finalDownloadUrl,
       };
 
+      // 2. Insert into Supabase PostgreSQL (if connected)
+      if (supabaseConnected) {
+        await insertSupabaseApp(newApp);
+      }
+
+      // 3. Save to localStorage as immediate offline cache
       try {
         const stored = localStorage.getItem('softrova_custom_apps');
         const customApps = stored ? JSON.parse(stored) : [];
@@ -421,7 +577,10 @@ export default function AdminUploadPage() {
       setPublishedApp(newApp);
       setIsSubmitting(false);
       setUploadSuccess(true);
-    }, 1800);
+    } catch (err) {
+      console.error('App submission error:', err);
+      setIsSubmitting(false);
+    }
   };
 
   // Save Social & Footer Settings
@@ -501,41 +660,121 @@ async def upload_app(
             </div>
           </div>
 
-          <form onSubmit={handleAuthSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                <span>Master Access Key</span>
-                <span className="text-[10px] text-cyan-400 font-mono">Default: softrova2026</span>
-              </label>
-              <div className="relative">
+          {/* Auth Method Selector */}
+          <div className="flex rounded-xl bg-[#0F1128] p-1 border border-slate-800">
+            <button
+              type="button"
+              onClick={() => { setAuthMode('passcode'); setAuthError(''); }}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                authMode === 'passcode'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Master Key
+            </button>
+            <button
+              type="button"
+              onClick={() => { setAuthMode('supabase'); setAuthError(''); }}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                authMode === 'supabase'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Supabase Auth {supabaseConnected && <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1"></span>}
+            </button>
+          </div>
+
+          {authMode === 'passcode' ? (
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                  <span>Master Access Key</span>
+                  <span className="text-[10px] text-cyan-400 font-mono">Default: softrova2026</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={passcode}
+                    onChange={(e) => setPasscode(e.target.value)}
+                    placeholder="Enter administrator passcode..."
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 font-mono"
+                  />
+                  <Key size={16} className="absolute left-3 top-3 text-cyan-400" />
+                </div>
+              </div>
+
+              {authError && (
+                <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertTriangle size={14} className="shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={lockoutSeconds > 0}
+                className="w-full py-3 rounded-xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan transition-all flex items-center justify-center gap-2"
+              >
+                <Lock size={14} />
+                <span>Unlock with Master Key</span>
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleAuthSubmit} className="space-y-3.5">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Supabase Admin Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="admin@softrova.com"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  Admin Password
+                </label>
                 <input
                   type="password"
                   required
-                  value={passcode}
-                  onChange={(e) => setPasscode(e.target.value)}
-                  placeholder="Enter administrator passcode..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 font-mono"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 font-mono"
                 />
-                <Key size={16} className="absolute left-3 top-3 text-cyan-400" />
               </div>
-            </div>
 
-            {authError && (
-              <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
-                <AlertTriangle size={14} className="shrink-0" />
-                <span>{authError}</span>
-              </div>
-            )}
+              {authError && (
+                <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertTriangle size={14} className="shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
 
-            <button
-              type="submit"
-              disabled={lockoutSeconds > 0}
-              className="w-full py-3 rounded-xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan transition-all flex items-center justify-center gap-2"
-            >
-              <Lock size={14} />
-              <span>Unlock Admin Portal</span>
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={isLoggingIn}
+                className="w-full py-3 rounded-xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Lock size={14} />
+                <span>{isLoggingIn ? 'Authenticating...' : 'Sign In with Supabase'}</span>
+              </button>
+
+              {!supabaseConnected && (
+                <p className="text-[11px] text-amber-400/90 text-center pt-1">
+                  Supabase credentials not yet configured in .env.local. Unlock instantly using Master Key.
+                </p>
+              )}
+            </form>
+          )}
 
           <div className="text-center pt-2">
             <Link
@@ -661,6 +900,24 @@ async def upload_app(
             >
               <Share2 size={15} />
               <span>Social & Footer</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveAdminTab('supabase')}
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all shrink-0 ${
+                activeAdminTab === 'supabase'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan'
+                  : 'bg-[#15173B] text-slate-400 hover:text-white'
+              }`}
+            >
+              <Database size={15} />
+              <span>Database & Auth</span>
+              {supabaseConnected ? (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-neon-cyan" title="Connected"></span>
+              ) : (
+                <span className="w-2 h-2 rounded-full bg-amber-400" title="Awaiting Keys"></span>
+              )}
             </button>
           </div>
         </div>
@@ -1464,6 +1721,144 @@ async def upload_app(
               </button>
             </div>
           </form>
+        )}
+
+        {/* TAB 5: SUPABASE DATABASE & AUTHENTICATION */}
+        {activeAdminTab === 'supabase' && (
+          <div className="space-y-6">
+            {/* Status Overview Card */}
+            <div className="p-6 rounded-3xl bg-gradient-to-r from-[#1A1B41] via-[#10122E] to-[#0B0D21] border border-cyan-400/40 shadow-3d-card space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center text-cyan-400">
+                    <Database size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                      <span>Supabase PostgreSQL & Storage Status</span>
+                      {supabaseConnected ? (
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-mono font-bold">
+                          ONLINE & CONNECTED
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-mono font-bold">
+                          AWAITING CREDENTIALS
+                        </span>
+                      )}
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      High-performance cloud database with real-time Row-Level Security (RLS) & Media Storage.
+                    </p>
+                  </div>
+                </div>
+
+                {adminUserEmail && (
+                  <div className="px-3 py-1.5 rounded-xl bg-[#15173B] border border-cyan-400/30 text-xs text-slate-300">
+                    Logged in as: <span className="font-bold text-cyan-300">{adminUserEmail}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Status Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                <div className="p-4 rounded-2xl bg-[#0F1128] border border-slate-800 space-y-1">
+                  <div className="text-[11px] text-slate-400 uppercase font-mono">Database Tables</div>
+                  <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <CheckCircle2 size={16} className="text-cyan-400" />
+                    <span>apps, categories, site_settings</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-[#0F1128] border border-slate-800 space-y-1">
+                  <div className="text-[11px] text-slate-400 uppercase font-mono">Row Level Security (RLS)</div>
+                  <div className="text-sm font-bold text-emerald-300 flex items-center gap-1.5">
+                    <ShieldCheck size={16} className="text-emerald-400" />
+                    <span>Public Read / Admin Write</span>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-[#0F1128] border border-slate-800 space-y-1">
+                  <div className="text-[11px] text-slate-400 uppercase font-mono">Storage Buckets</div>
+                  <div className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <Cloud size={16} className="text-cyan-400" />
+                    <span>app-icons, app-screenshots, app-binaries</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Setup Instructions */}
+            <div className="p-6 rounded-3xl bg-[#10122E] border border-slate-800 space-y-4">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Zap size={16} className="text-cyan-400" />
+                <span>3-Step Supabase Connection Guide</span>
+              </h3>
+
+              <div className="space-y-3 text-xs text-slate-300">
+                <div className="flex gap-3 items-start">
+                  <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-300 font-bold text-xs flex items-center justify-center shrink-0">1</div>
+                  <div>
+                    <strong className="text-white">Copy Credentials into <code className="text-cyan-300">.env.local</code>:</strong>
+                    <p className="text-slate-400 mt-0.5">
+                      In your Supabase Dashboard, go to <strong>Project Settings → API</strong>. Copy <strong>Project URL</strong> and <strong>Project API Keys: anon public</strong>, then paste them into <code className="text-cyan-300">.env.local</code>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 items-start">
+                  <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-300 font-bold text-xs flex items-center justify-center shrink-0">2</div>
+                  <div>
+                    <strong className="text-white">Run Database & Storage Migration (SQL Editor):</strong>
+                    <p className="text-slate-400 mt-0.5">
+                      Go to <strong>SQL Editor</strong> in Supabase, click <strong>New Query</strong>, paste the SQL schema below, and hit <strong>Run</strong>. This creates all tables, storage buckets, and RLS security policies.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 items-start">
+                  <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-300 font-bold text-xs flex items-center justify-center shrink-0">3</div>
+                  <div>
+                    <strong className="text-white">Create Admin User (Authentication):</strong>
+                    <p className="text-slate-400 mt-0.5">
+                      Go to <strong>Authentication → Users</strong> in Supabase, click <strong>Add user → Create user</strong> with your admin email and password. Then you can log into this portal with Supabase Auth!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SQL Migration Script Box */}
+            <div className="p-6 rounded-3xl bg-[#0D0F24] border border-cyan-400/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <FileCheck2 size={16} className="text-cyan-400" />
+                    <span>Supabase Schema Migration Script (schema.sql)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Creates tables, indexes, storage buckets, and enterprise Row Level Security (RLS) rules.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(SUPABASE_SCHEMA_SQL);
+                    setCopiedSql(true);
+                    setTimeout(() => setCopiedSql(false), 2500);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 hover:text-white hover:bg-cyan-500/30 text-xs font-bold flex items-center gap-1.5 transition-all"
+                >
+                  {copiedSql ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                  <span>{copiedSql ? 'Copied to Clipboard!' : 'Copy SQL Script'}</span>
+                </button>
+              </div>
+
+              <pre className="p-4 rounded-2xl bg-[#080916] border border-slate-800 text-[11px] font-mono text-cyan-200/90 overflow-x-auto max-h-96 leading-relaxed">
+                {SUPABASE_SCHEMA_SQL}
+              </pre>
+            </div>
+          </div>
         )}
 
       </div>
