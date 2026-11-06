@@ -161,9 +161,17 @@ export default function StorefrontPage() {
         return;
       }
     } catch {
-      // Fallback: window.location.assign triggers attachment download without navigating away
-      window.location.assign(downloadUrl);
+      // Fallback: invisible anchor trigger so the browser downloads without leaving the page
+      const fallbackLink = document.createElement('a');
+      fallbackLink.href = downloadUrl;
+      fallbackLink.setAttribute('download', cleanFilename);
+      fallbackLink.style.display = 'none';
+      document.body.appendChild(fallbackLink);
+      fallbackLink.click();
       setTimeout(() => {
+        try {
+          document.body.removeChild(fallbackLink);
+        } catch {}
         setDownloadingAppId(null);
         setDownloadProgress(0);
       }, 1000);
