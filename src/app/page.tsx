@@ -109,15 +109,12 @@ export default function StorefrontPage() {
   const handleDownload = async (app: AppItem) => {
     if (downloadingAppId) return;
     setDownloadingAppId(app.id);
-    setDownloadProgress(0);
+    setDownloadProgress(15);
 
     const interval = setInterval(() => {
       setDownloadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
-        return prev + 25;
+        if (prev >= 85) return 85;
+        return prev + 15;
       });
     }, 150);
 
@@ -134,14 +131,27 @@ export default function StorefrontPage() {
     const ext = extMatch ? extMatch[1] : 'apk';
     const cleanFilename = `${app.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_v${app.version}.${ext}`;
 
-    let downloadUrl = url;
-    if (downloadUrl.includes('supabase.co/storage/v1/object/public/')) {
-      const sep = downloadUrl.includes('?') ? '&' : '?';
-      downloadUrl = `${downloadUrl}${sep}download=${encodeURIComponent(cleanFilename)}`;
+    // Format Supabase Storage URL with download parameter to enforce Content-Disposition: attachment
+    let directUrl = url;
+    if (directUrl.includes('supabase.co/storage/v1/object/public/')) {
+      const sep = directUrl.includes('?') ? '&' : '?';
+      directUrl = `${directUrl}${sep}download=${encodeURIComponent(cleanFilename)}`;
     }
 
+    const triggerIframeDownload = () => {
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.src = directUrl;
+      document.body.appendChild(iframe);
+      setTimeout(() => {
+        try {
+          document.body.removeChild(iframe);
+        } catch {}
+      }, 30000);
+    };
+
     try {
-      const response = await fetch(downloadUrl);
+      const response = await fetch(directUrl);
       if (response.ok) {
         const blob = await response.blob();
         const blobUrl = window.URL.createObjectURL(blob);
@@ -155,27 +165,23 @@ export default function StorefrontPage() {
             document.body.removeChild(link);
             window.URL.revokeObjectURL(blobUrl);
           } catch {}
-          setDownloadingAppId(null);
-          setDownloadProgress(0);
-        }, 800);
-        return;
+        }, 1000);
+      } else {
+        triggerIframeDownload();
       }
     } catch {
-      // Fallback: invisible anchor trigger so the browser downloads without leaving the page
-      const fallbackLink = document.createElement('a');
-      fallbackLink.href = downloadUrl;
-      fallbackLink.setAttribute('download', cleanFilename);
-      fallbackLink.style.display = 'none';
-      document.body.appendChild(fallbackLink);
-      fallbackLink.click();
+      // Fallback: Invisible iframe triggers attachment download without navigating or blank page
+      triggerIframeDownload();
+    }
+
+    setTimeout(() => {
+      clearInterval(interval);
+      setDownloadProgress(100);
       setTimeout(() => {
-        try {
-          document.body.removeChild(fallbackLink);
-        } catch {}
         setDownloadingAppId(null);
         setDownloadProgress(0);
-      }, 1000);
-    }
+      }, 800);
+    }, 1000);
   };
 
   // Schema.org ItemList for Google App Store Carousel indexing
