@@ -36,7 +36,6 @@ export default function AppDetailModal({
 }: AppDetailModalProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'changelog'>('overview');
   const [activeScreenshotIdx, setActiveScreenshotIdx] = useState(0);
-  const [copiedHash, setCopiedHash] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -53,12 +52,6 @@ export default function AppDetailModal({
   }, [app, onClose]);
 
   if (!app) return null;
-
-  const handleCopySha = () => {
-    navigator.clipboard.writeText(app.specs.sha256);
-    setCopiedHash(true);
-    setTimeout(() => setCopiedHash(false), 2500);
-  };
 
   return (
     <div
@@ -307,31 +300,6 @@ export default function AppDetailModal({
                     {app.specs.permissions.join(', ')}
                   </p>
                 </div>
-              </div>
-
-              {/* SHA-256 Hash Verification Box */}
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-[#10122E] border border-cyan-500/30 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] sm:text-xs uppercase font-mono tracking-wider text-cyan-300 font-bold">
-                    Cryptographic SHA-256 Checksum
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCopySha}
-                    className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-white px-2.5 py-1 rounded-md bg-cyan-950/60 border border-cyan-500/30 transition-colors"
-                  >
-                    {copiedHash ? (
-                      <>
-                        <Check size={12} className="text-emerald-400" /> Copied
-                      </>
-                    ) : (
-                      <span>Copy Hash</span>
-                    )}
-                  </button>
-                </div>
-                <p className="text-[11px] font-mono text-slate-300 break-all select-all bg-[#0B0D21] p-2.5 rounded-lg border border-slate-800">
-                  {app.specs.sha256}
-                </p>
               </div>
             </div>
           )}

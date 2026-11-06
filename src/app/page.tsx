@@ -105,7 +105,8 @@ export default function StorefrontPage() {
   const [downloadingAppId, setDownloadingAppId] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
 
-  const handleDownload = (app: AppItem) => {
+  // Direct Background Download Engine (100% same page, no new tabs, no blank screen)
+  const handleDownload = async (app: AppItem) => {
     if (downloadingAppId) return;
     setDownloadingAppId(app.id);
     setDownloadProgress(0);
@@ -114,47 +115,59 @@ export default function StorefrontPage() {
       setDownloadProgress((prev) => {
         if (prev >= 100) {
           clearInterval(interval);
-          setTimeout(() => {
-            setDownloadingAppId(null);
-            setDownloadProgress(0);
-
-            // Trigger background download directly in the same page (no new tab or blank screen)
-            if (app.downloadUrl && (app.downloadUrl.startsWith('https://') || app.downloadUrl.startsWith('http://'))) {
-              let downloadUrl = app.downloadUrl;
-              const extMatch = downloadUrl.match(/\.(apk|zip|exe|dmg|tar\.gz|deb)(\?.*)?$/i);
-              const ext = extMatch ? extMatch[1] : 'apk';
-              const cleanFilename = `${app.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_v${app.version}.${ext}`;
-
-              if (downloadUrl.includes('supabase.co/storage/v1/object/public/')) {
-                const sep = downloadUrl.includes('?') ? '&' : '?';
-                downloadUrl = `${downloadUrl}${sep}download=${encodeURIComponent(cleanFilename)}`;
-              }
-
-              // Background invisible iframe download keeps user on current page
-              const iframe = document.createElement('iframe');
-              iframe.style.position = 'fixed';
-              iframe.style.top = '-9999px';
-              iframe.style.left = '-9999px';
-              iframe.style.width = '1px';
-              iframe.style.height = '1px';
-              iframe.style.opacity = '0';
-              iframe.style.pointerEvents = 'none';
-              iframe.style.border = 'none';
-              iframe.src = downloadUrl;
-              document.body.appendChild(iframe);
-
-              setTimeout(() => {
-                try {
-                  document.body.removeChild(iframe);
-                } catch {}
-              }, 30000);
-            }
-          }, 600);
           return 100;
         }
         return prev + 25;
       });
-    }, 200);
+    }, 150);
+
+    const url = app.downloadUrl;
+    if (!url || url === '#' || (!url.startsWith('https://') && !url.startsWith('http://'))) {
+      clearInterval(interval);
+      setDownloadingAppId(null);
+      setDownloadProgress(0);
+      alert('Application package is not yet available for download.');
+      return;
+    }
+
+    const extMatch = url.match(/\.(apk|zip|exe|dmg|tar\.gz|deb)(\?.*)?$/i);
+    const ext = extMatch ? extMatch[1] : 'apk';
+    const cleanFilename = `${app.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_v${app.version}.${ext}`;
+
+    let downloadUrl = url;
+    if (downloadUrl.includes('supabase.co/storage/v1/object/public/')) {
+      const sep = downloadUrl.includes('?') ? '&' : '?';
+      downloadUrl = `${downloadUrl}${sep}download=${encodeURIComponent(cleanFilename)}`;
+    }
+
+    try {
+      const response = await fetch(downloadUrl);
+      if (response.ok) {
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = cleanFilename;
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+          } catch {}
+          setDownloadingAppId(null);
+          setDownloadProgress(0);
+        }, 800);
+        return;
+      }
+    } catch {
+      // Fallback: window.location.assign triggers attachment download without navigating away
+      window.location.assign(downloadUrl);
+      setTimeout(() => {
+        setDownloadingAppId(null);
+        setDownloadProgress(0);
+      }, 1000);
+    }
   };
 
   // Schema.org ItemList for Google App Store Carousel indexing
