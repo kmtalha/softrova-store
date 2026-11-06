@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Navbar from '@/components/Navbar';
 import HeroCarousel from '@/components/HeroCarousel';
 import AppCard from '@/components/AppCard';
@@ -13,9 +13,10 @@ import {
   Zap,
   TrendingUp,
   Filter,
-  CheckCircle,
   ShieldCheck,
-  SearchX
+  SearchX,
+  Lock,
+  Cpu
 } from 'lucide-react';
 
 export default function StorefrontPage() {
@@ -26,7 +27,7 @@ export default function StorefrontPage() {
   const [sortBy, setSortBy] = useState<'featured' | 'rating' | 'name'>('featured');
 
   // Load custom apps uploaded from /admin/upload
-  React.useEffect(() => {
+  useEffect(() => {
     try {
       const stored = localStorage.getItem('softrova_custom_apps');
       if (stored) {
@@ -39,10 +40,6 @@ export default function StorefrontPage() {
       console.error('Failed to parse custom apps:', e);
     }
   }, []);
-
-  // Simulated download progress state
-  const [downloadingAppId, setDownloadingAppId] = useState<string | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<number>(0);
 
   // Filter & Search Logic
   const filteredApps = useMemo(() => {
@@ -62,14 +59,16 @@ export default function StorefrontPage() {
       .sort((a, b) => {
         if (sortBy === 'rating') return b.rating - a.rating;
         if (sortBy === 'name') return a.name.localeCompare(b.name);
-        // Default featured first
         return (b.featured ? 1 : 0) - (a.featured ? 1 : 0);
       });
   }, [apps, selectedCategory, searchQuery, sortBy]);
 
-  // Handle Download Click with realistic simulated progress
+  // Download simulation
+  const [downloadingAppId, setDownloadingAppId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+
   const handleDownload = (app: AppItem) => {
-    if (downloadingAppId) return; // Prevent concurrent simulation
+    if (downloadingAppId) return;
     setDownloadingAppId(app.id);
     setDownloadProgress(0);
 
@@ -88,10 +87,48 @@ export default function StorefrontPage() {
     }, 250);
   };
 
+  // Schema.org ItemList for Google App Store Carousel indexing
+  const jsonLdCatalog = {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: apps.map((app, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      item: {
+        '@type': 'SoftwareApplication',
+        name: app.name,
+        operatingSystem: app.specs.minOs,
+        applicationCategory: `${app.category}Application`,
+        aggregateRating: {
+          '@type': 'AggregateRating',
+          ratingValue: app.rating.toFixed(1),
+          ratingCount: app.reviewsCount,
+        },
+        offers: {
+          '@type': 'Offer',
+          price: '0',
+          priceCurrency: 'USD',
+        },
+        publisher: {
+          '@type': 'Organization',
+          name: app.developer,
+        },
+        description: app.shortDescription,
+        downloadUrl: `https://store.softrova.com/?app=${app.id}`,
+      },
+    })),
+  };
+
   return (
     <div className="min-h-screen bg-[#0B0D21] text-white flex flex-col bg-cyber-grid selection:bg-cyan-400 selection:text-slate-950">
       
-      {/* 1. Header & Navigation (Semantic <header>) */}
+      {/* Schema.org App Catalog JSON-LD */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdCatalog) }}
+      />
+
+      {/* Semantic Header */}
       <Navbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -99,10 +136,10 @@ export default function StorefrontPage() {
         onSelectCategory={setSelectedCategory}
       />
 
-      {/* 2. Main Storefront Body (Semantic <main>) */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 pb-20">
+      {/* Semantic Main Body */}
+      <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 space-y-8 sm:space-y-12 pb-16 sm:pb-20">
         
-        {/* Hero Section (When not actively filtering by text search) */}
+        {/* Hero Section */}
         {!searchQuery && (
           <HeroCarousel
             apps={apps}
@@ -112,13 +149,13 @@ export default function StorefrontPage() {
         )}
 
         {/* Store Catalog Header & Sort Controls */}
-        <section aria-labelledby="catalog-heading" className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-cyan-500/20 pb-4">
+        <section aria-labelledby="catalog-heading" className="space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-cyan-500/20 pb-4">
             <div>
               <div className="flex items-center gap-2">
                 <h2
                   id="catalog-heading"
-                  className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight"
+                  className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight"
                 >
                   {selectedCategory === 'All' ? 'All Applications' : `${selectedCategory} Applications`}
                 </h2>
@@ -127,12 +164,12 @@ export default function StorefrontPage() {
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                Explore hand-crafted software curated by Softrova Labs with zero telemetry leaks.
+                Curated futuristic binaries verified for isolated sandbox execution and zero telemetry leaks.
               </p>
             </div>
 
-            {/* Sort & Filter Controls */}
-            <div className="flex items-center gap-3 self-start sm:self-auto">
+            {/* Sort Controls */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
               <span className="text-xs text-slate-400 flex items-center gap-1">
                 <Filter size={12} className="text-cyan-400" /> Sort:
               </span>
@@ -142,7 +179,7 @@ export default function StorefrontPage() {
                     key={s}
                     type="button"
                     onClick={() => setSortBy(s)}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all ${
+                    className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all min-h-[30px] flex items-center justify-center ${
                       sortBy === s
                         ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan-pill'
                         : 'text-slate-400 hover:text-white'
@@ -158,13 +195,13 @@ export default function StorefrontPage() {
           {/* Active Search Badge */}
           {searchQuery && (
             <div className="flex items-center justify-between p-3 rounded-2xl bg-[#15173B]/80 border border-cyan-500/30 text-xs">
-              <span className="text-slate-300">
-                Search results for: <strong className="text-cyan-300 font-mono">"{searchQuery}"</strong>
+              <span className="text-slate-300 truncate mr-2">
+                Results for: <strong className="text-cyan-300 font-mono">"{searchQuery}"</strong>
               </span>
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="text-cyan-400 hover:text-white font-semibold underline"
+                className="text-cyan-400 hover:text-white font-semibold underline shrink-0"
               >
                 Clear Search
               </button>
@@ -173,12 +210,12 @@ export default function StorefrontPage() {
 
           {/* Empty State */}
           {filteredApps.length === 0 ? (
-            <div className="py-20 text-center rounded-3xl bg-[#10122E]/60 border border-slate-800 space-y-4">
+            <div className="py-16 sm:py-20 text-center rounded-3xl bg-[#10122E]/60 border border-slate-800 space-y-4 px-4">
               <div className="inline-flex p-4 rounded-3xl bg-cyan-500/10 text-cyan-400 border border-cyan-400/20 shadow-neon-cyan">
-                <SearchX size={40} />
+                <SearchX size={36} />
               </div>
               <div className="space-y-1">
-                <h3 className="text-lg font-bold text-white">No applications found</h3>
+                <h3 className="text-base sm:text-lg font-bold text-white">No applications match your query</h3>
                 <p className="text-xs text-slate-400 max-w-sm mx-auto">
                   We couldn't find any apps matching "{searchQuery}". Try selecting another category or clear your search terms.
                 </p>
@@ -195,8 +232,8 @@ export default function StorefrontPage() {
               </button>
             </div>
           ) : (
-            /* Responsive 3D App Cards Grid */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            /* Responsive Grid */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
               {filteredApps.map((app) => (
                 <AppCard
                   key={app.id}
@@ -211,15 +248,15 @@ export default function StorefrontPage() {
           )}
         </section>
 
-        {/* Ecosystem Guarantee Banner */}
-        <section aria-label="Softrova Security Guarantee" className="pt-6">
-          <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-[#1A1B41] via-[#10122E] to-[#0B0D21] border border-cyan-400/30 shadow-3d-card flex flex-col md:flex-row items-center justify-between gap-6">
+        {/* Security & Architecture Guarantee Banner */}
+        <section aria-label="Softrova Security Guarantee" className="pt-4 sm:pt-6">
+          <div className="rounded-3xl p-5 sm:p-8 bg-gradient-to-r from-[#1A1B41] via-[#10122E] to-[#0B0D21] border border-cyan-400/30 shadow-3d-card flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="space-y-2 text-center md:text-left">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-bold uppercase tracking-wider">
                 <Sparkles size={12} className="fill-amber-300" />
                 <span>Softrova Security Engine</span>
               </div>
-              <h3 className="text-xl sm:text-2xl font-black text-white">
+              <h3 className="text-lg sm:text-2xl font-black text-white">
                 Cryptographically Signed. Isolated. 100% Free of Bloatware.
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 max-w-2xl">
@@ -237,7 +274,7 @@ export default function StorefrontPage() {
 
       </main>
 
-      {/* 3. Sleek 3D App Detail Slide-Over / Modal */}
+      {/* App Detail Slide-Over Modal */}
       <AppDetailModal
         app={activeModalApp}
         onClose={() => setActiveModalApp(null)}
@@ -246,7 +283,7 @@ export default function StorefrontPage() {
         downloadProgress={downloadProgress}
       />
 
-      {/* 4. Footer (Semantic <footer>) */}
+      {/* Semantic Footer */}
       <Footer />
     </div>
   );

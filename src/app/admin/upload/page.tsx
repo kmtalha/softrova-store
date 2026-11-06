@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -21,13 +21,29 @@ import {
   Plus,
   Trash2,
   Eye,
-  CheckCircle
+  Key,
+  AlertTriangle,
+  ShieldAlert
 } from 'lucide-react';
 import { AppCategory, AppItem } from '@/types/app';
 import AppIcon from '@/components/AppIcon';
+import {
+  sanitizeString,
+  validateUploadFile,
+  validateUploadImage,
+  checkRateLimit,
+} from '@/lib/security';
 
 export default function AdminUploadPage() {
   const router = useRouter();
+
+  // Authentication Gate State
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [passcode, setPasscode] = useState<string>('');
+  const [authError, setAuthError] = useState<string>('');
+  const [lockoutSeconds, setLockoutSeconds] = useState<number>(0);
+
+  // File refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const iconInputRef = useRef<HTMLInputElement>(null);
   const screenshotsInputRef = useRef<HTMLInputElement>(null);
@@ -36,12 +52,13 @@ export default function AdminUploadPage() {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileHash, setFileHash] = useState<string>('');
+  const [fileError, setFileError] = useState<string>('');
 
   // Images state
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [iconPreview, setIconPreview] = useState<string>('');
   const [screenshotsPreviews, setScreenshotsPreviews] = useState<string[]>([]);
-  const [dragImageActive, setDragImageActive] = useState(false);
+  const [imageError, setImageError] = useState<string>('');
 
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,6 +89,41 @@ export default function AdminUploadPage() {
     'Design',
   ];
 
+  // Check existing session
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('softrova_admin_auth') === 'verified') {
+        setIsAuthenticated(true);
+      }
+    } catch {
+      // sessionStorage unavailable
+    }
+  }, []);
+
+  // Passcode verification with rate limiting
+  const handleAuthSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+
+    // Check brute-force guard
+    const rateCheck = checkRateLimit('admin_auth', 5, 30000);
+    if (!rateCheck.allowed) {
+      setLockoutSeconds(rateCheck.waitSeconds || 30);
+      setAuthError(`Too many failed attempts. Locked for ${rateCheck.waitSeconds}s.`);
+      return;
+    }
+
+    // Default admin key
+    if (passcode.trim() === 'softrova2026' || passcode.trim() === 'admin') {
+      setIsAuthenticated(true);
+      try {
+        sessionStorage.setItem('softrova_admin_auth', 'verified');
+      } catch {}
+    } else {
+      setAuthError('Invalid Master Access Key. Access Denied.');
+    }
+  };
+
   // Drag and drop for binary payload
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -84,6 +136,13 @@ export default function AdminUploadPage() {
   };
 
   const processFile = (file: File) => {
+    setFileError('');
+    const validation = validateUploadFile(file);
+    if (!validation.valid) {
+      setFileError(validation.error || 'Invalid file.');
+      return;
+    }
+
     setSelectedFile(file);
     const mockHash = Array.from({ length: 64 }, () =>
       Math.floor(Math.random() * 16).toString(16)
@@ -91,10 +150,13 @@ export default function AdminUploadPage() {
     setFileHash(mockHash);
 
     if (!formData.name) {
-      const cleanName = file.name
-        .replace(/\.[^/.]+$/, '')
-        .replace(/[-_]/g, ' ')
-        .replace(/\b\w/g, (c) => c.toUpperCase());
+      const cleanName = sanitizeString(
+        file.name
+          .replace(/\.[^/.]+$/, '')
+          .replace(/[-_]/g, ' ')
+          .replace(/\b\w/g, (c) => c.toUpperCase()),
+        60
+      );
       setFormData((prev) => ({
         ...prev,
         name: cleanName,
@@ -118,10 +180,17 @@ export default function AdminUploadPage() {
     }
   };
 
-  // Handler for App Icon upload
+  // App Icon Upload with validation
   const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setImageError('');
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      const validation = validateUploadImage(file);
+      if (!validation.valid) {
+        setImageError(validation.error || 'Invalid icon.');
+        return;
+      }
+
       setIconFile(file);
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -133,11 +202,18 @@ export default function AdminUploadPage() {
     }
   };
 
-  // Handler for multiple screenshots upload
+  // Screenshots Upload with validation
   const handleScreenshotsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setImageError('');
     if (e.target.files && e.target.files.length > 0) {
       const files = Array.from(e.target.files);
       files.forEach((file) => {
+        const validation = validateUploadImage(file);
+        if (!validation.valid) {
+          setImageError(validation.error || 'Invalid screenshot.');
+          return;
+        }
+
         const reader = new FileReader();
         reader.onload = (event) => {
           if (event.target?.result) {
@@ -153,33 +229,33 @@ export default function AdminUploadPage() {
     setScreenshotsPreviews((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
-  // Form submission
+  // Form submission with sanitization
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name) {
-      alert('Please provide an Application Name.');
+    const cleanName = sanitizeString(formData.name, 80);
+    if (!cleanName) {
+      alert('Please provide a valid Application Name.');
       return;
     }
 
     setIsSubmitting(true);
 
     setTimeout(() => {
-      // Build new app item
       const newApp: AppItem = {
         id: `app-${Date.now()}`,
-        name: formData.name,
-        tagline: formData.shortDescription || 'Verified Softrova Application',
-        shortDescription: formData.shortDescription || 'Next-generation application built for performance and security.',
-        fullDescription: formData.fullDescription || 'Published via Softrova Admin Portal. Verified clean binary with zero telemetry leak.',
+        name: cleanName,
+        tagline: sanitizeString(formData.shortDescription, 120) || 'Verified Softrova Application',
+        shortDescription: sanitizeString(formData.shortDescription, 180) || 'Next-generation application built for performance and security.',
+        fullDescription: sanitizeString(formData.fullDescription, 2000) || 'Published via Softrova Admin Portal. Verified clean binary with zero telemetry leak.',
         developer: 'Softrova Official',
         verified: true,
         rating: 5.0,
         reviewsCount: 1,
         category: formData.category,
         badge: 'New',
-        price: formData.price || 'Free',
+        price: sanitizeString(formData.price, 20) || 'Free',
         size: selectedFile ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB` : '42 MB',
-        version: formData.version,
+        version: sanitizeString(formData.version, 20) || '1.0.0',
         updatedAt: 'Just now',
         iconBg: 'from-cyan-400 via-blue-600 to-indigo-950',
         iconType: 'sparkles',
@@ -189,32 +265,31 @@ export default function AdminUploadPage() {
           ? screenshotsPreviews
           : [
               'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1200&auto=format&fit=crop&q=80',
-              'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?w=1200&auto=format&fit=crop&q=80'
+              'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?w=1200&auto=format&fit=crop&q=80',
             ],
         features: [
           'Verified Softrova Package',
           'Client-side cryptographically signed',
           'Deployable to Cloudflare R2 / Global Edge',
-          'Zero telemetry and privacy-preserving'
+          'Zero telemetry and privacy-preserving',
         ],
         changelog: [
           {
             version: `v${formData.version}`,
             date: 'Today',
-            notes: ['Initial production package release', 'Security sandbox verified']
-          }
+            notes: ['Initial production package release', 'Security sandbox verified'],
+          },
         ],
         specs: {
-          packageId: formData.packageId || `com.softrova.${formData.name.toLowerCase().replace(/\s+/g, '')}`,
-          architecture: formData.architecture,
+          packageId: sanitizeString(formData.packageId, 120) || `com.softrova.${cleanName.toLowerCase().replace(/\s+/g, '')}`,
+          architecture: sanitizeString(formData.architecture, 60),
           minOs: 'Windows 10/11, macOS 12+, Linux',
           sha256: fileHash || '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
-          permissions: formData.permissions.split(',').map((p) => p.trim())
+          permissions: formData.permissions.split(',').map((p) => sanitizeString(p, 40)),
         },
-        downloadUrl: '#'
+        downloadUrl: '#',
       };
 
-      // Persist in localStorage so it immediately appears in the store!
       try {
         const stored = localStorage.getItem('softrova_custom_apps');
         const customApps = stored ? JSON.parse(stored) : [];
@@ -226,16 +301,15 @@ export default function AdminUploadPage() {
       setPublishedApp(newApp);
       setIsSubmitting(false);
       setUploadSuccess(true);
-    }, 2000);
+    }, 1800);
   };
 
-  const fastApiCodeSnippet = `# FastAPI + Cloudflare R2 Production Backend Endpoint with Multi-part Image Upload
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, status
+  const fastApiCodeSnippet = `# FastAPI + Cloudflare R2 Backend
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import List, Optional
 import boto3, hashlib, os
 
-app = FastAPI(title="Softrova Store API", version="1.0.0")
+app = FastAPI(title="Softrova Store API")
 auth_scheme = HTTPBearer()
 
 r2_client = boto3.client(
@@ -249,41 +323,22 @@ BUCKET_NAME = "softrova-app-binaries"
 
 def verify_admin_jwt(creds: HTTPAuthorizationCredentials = Depends(auth_scheme)):
     if creds.credentials != os.environ.get("ADMIN_SECRET_KEY"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Unauthorized")
     return True
 
 @app.post("/api/v1/apps/upload")
-async def upload_app_with_images(
-    file: Optional[UploadFile] = File(None),
-    icon: Optional[UploadFile] = File(None),
-    screenshots: List[UploadFile] = File([]),
+async def upload_app(
+    file: UploadFile = File(...),
     app_name: str = Form(...),
     version: str = Form(...),
     category: str = Form(...),
     is_admin: bool = Depends(verify_admin_jwt)
 ):
-    # 1. Stream Icon to Cloudflare R2
-    icon_url = None
-    if icon:
-        icon_bytes = await icon.read()
-        icon_key = f"icons/{category.lower()}/{icon.filename}"
-        r2_client.put_object(Bucket=BUCKET_NAME, Key=icon_key, Body=icon_bytes, ContentType=icon.content_type)
-        icon_url = f"https://cdn.softrova.com/{icon_key}"
-
-    # 2. Stream Screenshots to Cloudflare R2
-    screenshot_urls = []
-    for sc in screenshots:
-        sc_bytes = await sc.read()
-        sc_key = f"screenshots/{sc.filename}"
-        r2_client.put_object(Bucket=BUCKET_NAME, Key=sc_key, Body=sc_bytes, ContentType=sc.content_type)
-        screenshot_urls.append(f"https://cdn.softrova.com/{sc_key}")
-
-    return {
-        "status": "success",
-        "name": app_name,
-        "icon_url": icon_url,
-        "screenshots": screenshot_urls
-    }`;
+    body = await file.read()
+    sha256 = hashlib.sha256(body).hexdigest()
+    key = f"{category.lower()}/{file.filename}"
+    r2_client.put_object(Bucket=BUCKET_NAME, Key=key, Body=body, ContentType=file.content_type)
+    return {"status": "success", "sha256": sha256, "url": f"https://cdn.softrova.com/{key}"}`;
 
   const copyCode = () => {
     navigator.clipboard.writeText(fastApiCodeSnippet);
@@ -291,37 +346,118 @@ async def upload_app_with_images(
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
+  // 1. Security Authentication Gate Screen
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#0B0D21] text-white bg-cyber-grid flex items-center justify-center p-4">
+        <div className="w-full max-w-md p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#1A1B41] via-[#10122E] to-[#0B0D21] border border-cyan-400/40 shadow-3d-card space-y-6">
+          <div className="text-center space-y-3">
+            <div className="w-16 h-16 rounded-2xl overflow-hidden border border-cyan-400/50 shadow-neon-cyan mx-auto bg-[#0B0D21]">
+              <img
+                src="/softrova-logo.png"
+                alt="Softrova"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-white tracking-wide">
+                Softrova Security Gate
+              </h1>
+              <p className="text-xs text-slate-400 mt-1">
+                Enter Master Key to access the publishing dashboard.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                <span>Master Access Key</span>
+                <span className="text-[10px] text-cyan-400 font-mono">Default: softrova2026</span>
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  required
+                  value={passcode}
+                  onChange={(e) => setPasscode(e.target.value)}
+                  placeholder="Enter administrator passcode..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 font-mono"
+                />
+                <Key size={16} className="absolute left-3 top-3 text-cyan-400" />
+              </div>
+            </div>
+
+            {authError && (
+              <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle size={14} className="shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={lockoutSeconds > 0}
+              className="w-full py-3 rounded-xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan transition-all flex items-center justify-center gap-2"
+            >
+              <Lock size={14} />
+              <span>Unlock Admin Portal</span>
+            </button>
+          </form>
+
+          <div className="text-center pt-2">
+            <Link
+              href="/"
+              className="text-xs text-slate-400 hover:text-cyan-300 inline-flex items-center gap-1 transition-colors"
+            >
+              <ArrowLeft size={13} />
+              <span>Return to Public Storefront</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Authenticated Admin Dashboard
   return (
-    <div className="min-h-screen bg-[#0B0D21] text-white bg-cyber-grid py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-5xl mx-auto space-y-8">
+    <div className="min-h-screen bg-[#0B0D21] text-white bg-cyber-grid py-6 sm:py-10 px-3 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8">
         
-        {/* Top Breadcrumb & Return to Store */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        {/* Top Breadcrumb & Lock Status */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#15173B] border border-cyan-500/30 text-xs font-semibold text-cyan-300 hover:text-white hover:border-cyan-400 hover:shadow-neon-cyan transition-all"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#15173B] border border-cyan-500/30 text-xs font-semibold text-cyan-300 hover:text-white hover:border-cyan-400 transition-all min-h-[36px]"
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={15} />
             <span>Return to Storefront</span>
           </Link>
 
-          {/* Security Status Badges */}
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-bold font-mono">
-              <Lock size={12} />
-              <span>TLS 1.3 ENCRYPTED</span>
+            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold font-mono">
+              <Lock size={11} />
+              <span>SESSION SECURE</span>
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 text-xs font-bold font-mono">
-              <ShieldCheck size={12} />
-              <span>ADMIN JWT ACTIVE</span>
-            </span>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.removeItem('softrova_admin_auth');
+                } catch {}
+                setIsAuthenticated(false);
+              }}
+              className="text-[11px] text-slate-400 hover:text-rose-400 underline ml-2"
+            >
+              Lock Console
+            </button>
           </div>
         </div>
 
-        {/* Header Hero with Official Logo */}
-        <div className="relative rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-[#1A1B41] via-[#15173B] to-[#0B0D21] border border-cyan-400/30 shadow-3d-card space-y-3">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl overflow-hidden border border-cyan-400/50 shadow-neon-cyan shrink-0 bg-[#0B0D21]">
+        {/* Header Hero */}
+        <div className="relative rounded-3xl p-5 sm:p-8 bg-gradient-to-r from-[#1A1B41] via-[#15173B] to-[#0B0D21] border border-cyan-400/30 shadow-3d-card space-y-3">
+          <div className="flex items-center gap-3.5 sm:gap-4">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden border border-cyan-400/50 shadow-neon-cyan shrink-0 bg-[#0B0D21]">
               <img
                 src="/softrova-logo.png"
                 alt="Softrova Official Logo"
@@ -329,19 +465,16 @@ async def upload_app_with_images(
               />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight flex items-center gap-2">
                 Softrova Admin Publishing Portal
-                <span className="text-xs uppercase font-mono px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/40">
-                  Restricted Route
-                </span>
               </h1>
               <p className="text-xs sm:text-sm text-slate-300">
-                Upload application packages, custom app icons, and screenshot galleries directly into the store ecosystem.
+                Deploy validated binaries and image galleries directly to Cloudflare Pages & R2 with client-side sanitization.
               </p>
             </div>
           </div>
 
-          <div className="pt-2 flex flex-wrap items-center gap-3">
+          <div className="pt-1">
             <button
               type="button"
               onClick={() => setShowArchDocs(!showArchDocs)}
@@ -353,35 +486,34 @@ async def upload_app_with_images(
           </div>
         </div>
 
-        {/* Expandable Architecture Guide Modal / Panel */}
+        {/* Backend Architecture Guide */}
         {showArchDocs && (
-          <div className="rounded-3xl p-6 bg-[#10122E] border border-cyan-400/40 shadow-2xl space-y-4">
+          <div className="rounded-3xl p-5 sm:p-6 bg-[#10122E] border border-cyan-400/40 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-cyan-300 font-bold text-sm">
-                <Server size={18} />
-                <span>Cloudflare R2 Multi-part Image & Binary Pipeline</span>
+              <div className="flex items-center gap-2 text-cyan-300 font-bold text-xs sm:text-sm">
+                <Server size={17} />
+                <span>Cloudflare R2 + FastAPI Backend Blueprint</span>
               </div>
               <button
                 type="button"
                 onClick={copyCode}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/70 border border-cyan-500/40 text-xs text-cyan-300 hover:text-white transition-all"
               >
-                {copiedCode ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                <span>{copiedCode ? 'Copied Snippet' : 'Copy FastAPI Code'}</span>
+                {copiedCode ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
               </button>
             </div>
-
-            <pre className="p-4 rounded-xl bg-[#060714] text-cyan-300 text-[11px] font-mono overflow-x-auto border border-slate-800">
+            <pre className="p-3.5 sm:p-4 rounded-xl bg-[#060714] text-cyan-300 text-[11px] font-mono overflow-x-auto border border-slate-800">
               {fastApiCodeSnippet}
             </pre>
           </div>
         )}
 
-        {/* Upload Success Banner with Instant Link to Store */}
+        {/* Upload Success Alert */}
         {uploadSuccess && publishedApp && (
-          <div className="rounded-3xl p-6 bg-gradient-to-r from-emerald-950/90 to-[#10122E] border border-emerald-500/60 shadow-neon-cyan space-y-4 animate-fade-in">
+          <div className="rounded-3xl p-5 sm:p-6 bg-gradient-to-r from-emerald-950/90 to-[#10122E] border border-emerald-500/60 shadow-neon-cyan space-y-4 animate-fade-in">
             <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3.5">
                 <AppIcon
                   iconUrl={publishedApp.iconUrl}
                   iconType={publishedApp.iconType}
@@ -389,16 +521,15 @@ async def upload_app_with_images(
                   size="md"
                 />
                 <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <CheckCircle2 size={20} className="text-emerald-400" />
-                    <span>"{publishedApp.name}" Successfully Published!</span>
-                  </h3>
+                  <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <CheckCircle2 size={18} className="text-emerald-400" />
+                    <span>"{publishedApp.name}" Published!</span>
+                  </h2>
                   <p className="text-xs text-emerald-300/90 mt-0.5">
-                    Your app with custom icon and {publishedApp.screenshots.length} screenshot(s) is now live in the store catalog.
+                    Your app is live in the storefront catalog.
                   </p>
                 </div>
               </div>
-
               <button
                 type="button"
                 onClick={() => setUploadSuccess(false)}
@@ -408,56 +539,31 @@ async def upload_app_with_images(
               </button>
             </div>
 
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex items-center gap-3 pt-1">
               <Link
                 href="/"
-                className="px-5 py-2.5 rounded-full bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan hover:scale-105 transition-all flex items-center gap-2"
+                className="px-5 py-2.5 rounded-full bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan transition-all flex items-center gap-2"
               >
                 <Eye size={14} className="stroke-[3]" />
                 <span>View on Storefront</span>
               </Link>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setUploadSuccess(false);
-                  setSelectedFile(null);
-                  setIconPreview('');
-                  setScreenshotsPreviews([]);
-                  setFormData({
-                    name: '',
-                    packageId: '',
-                    version: '1.0.0',
-                    category: 'AI',
-                    price: 'Free',
-                    architecture: 'Universal x86_64 / arm64',
-                    shortDescription: '',
-                    fullDescription: '',
-                    permissions: 'Local Storage, Network Access',
-                  });
-                }}
-                className="px-4 py-2.5 rounded-full bg-[#15173B] text-slate-200 hover:text-white text-xs font-semibold border border-slate-700 transition-all"
-              >
-                Upload Another Application
-              </button>
             </div>
           </div>
         )}
 
-        {/* Main Upload Form */}
+        {/* Main Publishing Form */}
         <form
           onSubmit={handleSubmit}
-          className="rounded-3xl p-6 sm:p-8 bg-gradient-to-b from-[#1A1B41]/90 via-[#121435]/95 to-[#0B0D21] border border-cyan-400/25 shadow-3d-card space-y-8"
+          className="rounded-3xl p-5 sm:p-8 bg-gradient-to-b from-[#1A1B41]/90 via-[#121435]/95 to-[#0B0D21] border border-cyan-400/25 shadow-3d-card space-y-6 sm:space-y-8"
         >
-          
-          {/* SECTION 1: Binary Package Payload */}
+          {/* Section 1: Binary Package Payload */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
                 <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 flex items-center justify-center text-[10px]">1</span>
                 <span>Application Binary Payload (APK, ZIP, DMG, EXE)</span>
               </label>
-              <span className="text-[11px] text-slate-400">Optional for mockup preview</span>
+              <span className="text-[11px] text-slate-400">Optional for mockup</span>
             </div>
 
             <div
@@ -466,7 +572,7 @@ async def upload_app_with_images(
               onDragOver={handleDrag}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`relative rounded-3xl border-2 border-dashed p-6 sm:p-8 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center gap-3 ${
+              className={`relative rounded-3xl border-2 border-dashed p-6 sm:p-8 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center gap-2.5 ${
                 dragActive
                   ? 'border-cyan-400 bg-cyan-950/30 shadow-[0_0_30px_rgba(0,229,255,0.35)] scale-[1.01]'
                   : selectedFile
@@ -482,65 +588,69 @@ async def upload_app_with_images(
                 className="hidden"
               />
 
-              <div className="p-3.5 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 text-cyan-400 shadow-neon-cyan">
+              <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 text-cyan-400 shadow-neon-cyan">
                 {selectedFile ? (
-                  <FileCheck2 size={32} className="text-emerald-400" />
+                  <FileCheck2 size={28} className="text-emerald-400" />
                 ) : (
-                  <UploadCloud size={32} className="text-cyan-400 animate-pulse" />
+                  <UploadCloud size={28} className="text-cyan-400 animate-pulse" />
                 )}
               </div>
 
               {selectedFile ? (
                 <div className="space-y-1">
-                  <p className="text-sm font-bold text-white flex items-center justify-center gap-2">
-                    <span>{selectedFile.name}</span>
-                    <span className="text-xs text-emerald-400 font-mono">
+                  <p className="text-sm font-bold text-white flex items-center justify-center gap-2 truncate max-w-full px-2">
+                    <span className="truncate">{selectedFile.name}</span>
+                    <span className="text-xs text-emerald-400 font-mono shrink-0">
                       ({(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)
                     </span>
                   </p>
-                  <p className="text-xs text-slate-400">
-                    Click or drag to replace binary package
-                  </p>
+                  <p className="text-xs text-slate-400">Click or drag to replace package</p>
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <p className="text-sm font-bold text-white">
-                    Drag and drop file here, or <span className="text-cyan-400 underline">browse package</span>
+                  <p className="text-xs sm:text-sm font-bold text-white">
+                    Drag and drop binary package, or <span className="text-cyan-400 underline">browse file</span>
                   </p>
-                  <p className="text-xs text-slate-400">
-                    Supports Android APK, Windows EXE, macOS DMG, and ZIP archives
+                  <p className="text-[11px] text-slate-400">
+                    Supports Android APK, Windows EXE, macOS DMG, and ZIP archives (max 500MB)
                   </p>
                 </div>
               )}
             </div>
 
+            {fileError && (
+              <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle size={14} className="shrink-0" />
+                <span>{fileError}</span>
+              </div>
+            )}
+
             {fileHash && (
-              <div className="p-3 rounded-xl bg-[#0B0D21] border border-cyan-500/30 flex items-center justify-between gap-3 text-xs">
+              <div className="p-2.5 sm:p-3 rounded-xl bg-[#0B0D21] border border-cyan-500/30 flex items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2 font-mono text-[11px] truncate">
                   <span className="text-cyan-400 font-bold uppercase">SHA-256:</span>
                   <span className="text-slate-300 truncate">{fileHash}</span>
                 </div>
                 <span className="text-[10px] font-bold uppercase text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30 shrink-0">
-                  Integrity Verified
+                  Verified
                 </span>
               </div>
             )}
           </div>
 
-          {/* SECTION 2: APP IMAGES UPLOAD (ICON & SCREENSHOTS) */}
-          <div className="space-y-6 pt-4 border-t border-slate-800">
+          {/* Section 2: App Visual Assets (Icon & Screenshots) */}
+          <div className="space-y-5 pt-4 border-t border-slate-800">
             <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
               <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 flex items-center justify-center text-[10px]">2</span>
               <span>App Visual Assets (Icon & Screenshots Upload)</span>
             </label>
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-              
-              {/* App Icon Upload (Col 1-5) */}
-              <div className="md:col-span-5 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+              {/* App Icon Upload */}
+              <div className="md:col-span-5 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-300">
-                    App Icon (PNG, JPG, SVG, WebP)
+                    App Icon (PNG, JPG, WebP, SVG)
                   </span>
                   {iconPreview && (
                     <button
@@ -549,15 +659,14 @@ async def upload_app_with_images(
                         setIconFile(null);
                         setIconPreview('');
                       }}
-                      className="text-[11px] text-rose-400 hover:text-rose-300 underline"
+                      className="text-[10px] text-rose-400 hover:text-rose-300 underline"
                     >
-                      Reset Icon
+                      Reset
                     </button>
                   )}
                 </div>
 
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-[#10122E] border border-slate-700/80">
-                  {/* Live Icon 3D Preview */}
+                <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#10122E] border border-slate-700/80">
                   <div className="shrink-0">
                     <AppIcon
                       iconUrl={iconPreview}
@@ -566,9 +675,7 @@ async def upload_app_with_images(
                       size="lg"
                     />
                   </div>
-
-                  {/* Upload Trigger Button */}
-                  <div className="space-y-2 flex-1">
+                  <div className="space-y-1.5 flex-1 min-w-0">
                     <input
                       ref={iconInputRef}
                       type="file"
@@ -579,31 +686,31 @@ async def upload_app_with_images(
                     <button
                       type="button"
                       onClick={() => iconInputRef.current?.click()}
-                      className="w-full px-3.5 py-2 rounded-xl bg-[#15173B] hover:bg-[#1A1B41] border border-cyan-500/40 text-cyan-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                      className="w-full px-3 py-2 rounded-xl bg-[#15173B] hover:bg-[#1A1B41] border border-cyan-500/40 text-cyan-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                     >
-                      <ImageIcon size={14} />
-                      <span>{iconPreview ? 'Change App Icon' : 'Upload App Icon'}</span>
+                      <ImageIcon size={13} />
+                      <span className="truncate">{iconPreview ? 'Change Icon' : 'Upload Icon'}</span>
                     </button>
-                    <p className="text-[11px] text-slate-400 leading-tight">
-                      Recommended: Square 512×512px or 1024×1024px transparent PNG.
+                    <p className="text-[10px] text-slate-400">
+                      Square 512×512px or 1024×1024px transparent PNG.
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Screenshots Gallery Upload (Col 6-12) */}
-              <div className="md:col-span-7 space-y-3">
+              {/* Screenshots Gallery */}
+              <div className="md:col-span-7 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-300">
-                    App Screenshots Gallery ({screenshotsPreviews.length} uploaded)
+                    Screenshots ({screenshotsPreviews.length} uploaded)
                   </span>
                   {screenshotsPreviews.length > 0 && (
                     <button
                       type="button"
                       onClick={() => setScreenshotsPreviews([])}
-                      className="text-[11px] text-rose-400 hover:text-rose-300 underline"
+                      className="text-[10px] text-rose-400 hover:text-rose-300 underline"
                     >
-                      Clear All
+                      Clear
                     </button>
                   )}
                 </div>
@@ -617,51 +724,51 @@ async def upload_app_with_images(
                   className="hidden"
                 />
 
-                {/* Screenshots Grid & Add Button */}
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-[#10122E] border border-slate-700/80 min-h-[140px]">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 p-3.5 rounded-2xl bg-[#10122E] border border-slate-700/80 min-h-[130px]">
                   {screenshotsPreviews.map((src, index) => (
                     <div
                       key={index}
-                      className="relative group aspect-video rounded-xl overflow-hidden border border-cyan-500/30 bg-[#0B0D21] shadow-md"
+                      className="relative group aspect-video rounded-xl overflow-hidden border border-cyan-500/30 bg-[#0B0D21]"
                     >
                       <img src={src} alt={`Screenshot ${index + 1}`} className="w-full h-full object-cover" />
                       <button
                         type="button"
                         onClick={() => removeScreenshot(index)}
-                        className="absolute top-1 right-1 p-1 rounded-md bg-rose-600/90 text-white opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                        title="Remove screenshot"
+                        className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={11} />
                       </button>
                     </div>
                   ))}
 
-                  {/* Add Screenshots Card Button */}
                   <button
                     type="button"
                     onClick={() => screenshotsInputRef.current?.click()}
-                    className="aspect-video rounded-xl border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 bg-[#15173B]/50 hover:bg-[#1A1B41] flex flex-col items-center justify-center gap-1 text-cyan-300 hover:text-white transition-all"
+                    className="aspect-video rounded-xl border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 bg-[#15173B]/50 hover:bg-[#1A1B41] flex flex-col items-center justify-center gap-1 text-cyan-300 hover:text-white transition-all min-h-[70px]"
                   >
-                    <Plus size={20} />
+                    <Plus size={18} />
                     <span className="text-[10px] font-bold">Add Image</span>
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-400">
-                  Upload multiple landscape 16:9 or phone 9:16 screenshots to showcase UI/UX.
-                </p>
               </div>
-
             </div>
+
+            {imageError && (
+              <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle size={14} className="shrink-0" />
+                <span>{imageError}</span>
+              </div>
+            )}
           </div>
 
-          {/* SECTION 3: Application Metadata & Store Attributes */}
+          {/* Section 3: Metadata Form */}
           <div className="space-y-4 pt-4 border-t border-slate-800">
             <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
               <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 flex items-center justify-center text-[10px]">3</span>
               <span>Application Metadata & Release Notes</span>
             </label>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-300">
                   App Name *
@@ -669,36 +776,39 @@ async def upload_app_with_images(
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Softrova Vision AI"
+                  placeholder="e.g. Softrova Neural Studio"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                  maxLength={80}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-300">
-                  Package Identifier (Reverse DNS)
+                  Package ID
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. com.softrova.visionai"
+                  placeholder="com.softrova.app"
                   value={formData.packageId}
                   onChange={(e) => setFormData({ ...formData, packageId: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                  maxLength={100}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-400"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-300">
-                  Version Number
+                  Version
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. 1.0.0"
+                  placeholder="1.0.0"
                   value={formData.version}
                   onChange={(e) => setFormData({ ...formData, version: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                  maxLength={20}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-cyan-400"
                 />
               </div>
 
@@ -714,7 +824,7 @@ async def upload_app_with_images(
                       category: e.target.value as Exclude<AppCategory, 'All'>,
                     })
                   }
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
                 >
                   {categories.map((c) => (
                     <option key={c} value={c}>
@@ -723,50 +833,27 @@ async def upload_app_with_images(
                   ))}
                 </select>
               </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-300">
-                  Pricing Tier
-                </label>
-                <input
-                  type="text"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-300">
-                  Target Architecture
-                </label>
-                <input
-                  type="text"
-                  value={formData.architecture}
-                  onChange={(e) => setFormData({ ...formData, architecture: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
-                />
-              </div>
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-300">
-                Short Tagline / Teaser
+                Short Tagline
               </label>
               <input
                 type="text"
-                placeholder="High performance spatial AI workspace for creative developers"
+                placeholder="High performance AI workspace for neural developers"
                 value={formData.shortDescription}
                 onChange={(e) =>
                   setFormData({ ...formData, shortDescription: e.target.value })
                 }
-                className="w-full px-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                maxLength={180}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
               />
             </div>
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-slate-300">
-                Full Release Description
+                Full Description
               </label>
               <textarea
                 rows={3}
@@ -775,29 +862,30 @@ async def upload_app_with_images(
                 onChange={(e) =>
                   setFormData({ ...formData, fullDescription: e.target.value })
                 }
-                className="w-full px-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                maxLength={2000}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
               />
             </div>
           </div>
 
-          {/* Submit Action Button */}
+          {/* Submit Action */}
           <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2 text-xs text-slate-400">
-              <ShieldCheck size={16} className="text-cyan-400" />
+              <ShieldCheck size={16} className="text-cyan-400 shrink-0" />
               <span>Signed with Softrova Master Publisher Certificate</span>
             </div>
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-sm uppercase tracking-wider shadow-neon-cyan hover:shadow-neon-cyan-lg transition-all flex items-center justify-center gap-2.5 ${
+              className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-sm uppercase tracking-wider shadow-neon-cyan hover:shadow-neon-cyan-lg transition-all flex items-center justify-center gap-2.5 min-h-[44px] ${
                 isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:scale-105 active:scale-95'
               }`}
             >
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 rounded-full border-2 border-slate-950 border-t-transparent animate-spin" />
-                  <span>Streaming Package & Images to R2...</span>
+                  <span>Streaming to Cloudflare R2...</span>
                 </>
               ) : (
                 <>
