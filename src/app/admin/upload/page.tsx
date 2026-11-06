@@ -23,9 +23,14 @@ import {
   Eye,
   Key,
   AlertTriangle,
-  ShieldAlert
+  Settings,
+  Share2,
+  Globe,
+  Mail
 } from 'lucide-react';
 import { AppCategory, AppItem } from '@/types/app';
+import { SiteSettings } from '@/types/settings';
+import { DEFAULT_SITE_SETTINGS } from '@/data/settings';
 import AppIcon from '@/components/AppIcon';
 import {
   sanitizeString,
@@ -42,6 +47,9 @@ export default function AdminUploadPage() {
   const [passcode, setPasscode] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
   const [lockoutSeconds, setLockoutSeconds] = useState<number>(0);
+
+  // Active Tab: 'publish' (Publish Apps) | 'settings' (Edit Socials & Footer)
+  const [activeAdminTab, setActiveAdminTab] = useState<'publish' | 'settings'>('publish');
 
   // File refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -67,7 +75,11 @@ export default function AdminUploadPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [showArchDocs, setShowArchDocs] = useState(false);
 
-  // Form State
+  // Site & Social Media Settings State
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // Form State for App Upload
   const [formData, setFormData] = useState({
     name: '',
     packageId: '',
@@ -89,23 +101,26 @@ export default function AdminUploadPage() {
     'Design',
   ];
 
-  // Check existing session
+  // Check existing session & load site settings
   useEffect(() => {
     try {
       if (sessionStorage.getItem('softrova_admin_auth') === 'verified') {
         setIsAuthenticated(true);
       }
+      const stored = localStorage.getItem('softrova_site_settings');
+      if (stored) {
+        setSiteSettings(JSON.parse(stored));
+      }
     } catch {
-      // sessionStorage unavailable
+      // Storage unavailable
     }
   }, []);
 
-  // Passcode verification with rate limiting
+  // Passcode verification
   const handleAuthSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
 
-    // Check brute-force guard
     const rateCheck = checkRateLimit('admin_auth', 5, 30000);
     if (!rateCheck.allowed) {
       setLockoutSeconds(rateCheck.waitSeconds || 30);
@@ -113,7 +128,6 @@ export default function AdminUploadPage() {
       return;
     }
 
-    // Default admin key
     if (passcode.trim() === 'softrova2026' || passcode.trim() === 'admin') {
       setIsAuthenticated(true);
       try {
@@ -180,14 +194,14 @@ export default function AdminUploadPage() {
     }
   };
 
-  // App Icon Upload with validation
+  // App Icon Upload
   const handleIconChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setImageError('');
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       const validation = validateUploadImage(file);
       if (!validation.valid) {
-        setImageError(validation.error || 'Invalid icon.');
+        setImageError(validation.error || 'Invalid icon format.');
         return;
       }
 
@@ -202,7 +216,7 @@ export default function AdminUploadPage() {
     }
   };
 
-  // Screenshots Upload with validation
+  // Screenshots Upload
   const handleScreenshotsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setImageError('');
     if (e.target.files && e.target.files.length > 0) {
@@ -210,7 +224,7 @@ export default function AdminUploadPage() {
       files.forEach((file) => {
         const validation = validateUploadImage(file);
         if (!validation.valid) {
-          setImageError(validation.error || 'Invalid screenshot.');
+          setImageError(validation.error || 'Invalid screenshot format.');
           return;
         }
 
@@ -229,7 +243,7 @@ export default function AdminUploadPage() {
     setScreenshotsPreviews((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
-  // Form submission with sanitization
+  // Form submission: App Upload
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = sanitizeString(formData.name, 80);
@@ -304,6 +318,18 @@ export default function AdminUploadPage() {
     }, 1800);
   };
 
+  // Save Social & Footer Settings
+  const handleSaveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      localStorage.setItem('softrova_site_settings', JSON.stringify(siteSettings));
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 3000);
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+    }
+  };
+
   const fastApiCodeSnippet = `# FastAPI + Cloudflare R2 Backend
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -361,10 +387,10 @@ async def upload_app(
             </div>
             <div>
               <h1 className="text-xl font-black text-white tracking-wide">
-                Softrova Security Gate
+                Softrova Security Console
               </h1>
               <p className="text-xs text-slate-400 mt-1">
-                Enter Master Key to access the publishing dashboard.
+                Enter Master Key to access the administration dashboard.
               </p>
             </div>
           </div>
@@ -455,7 +481,7 @@ async def upload_app(
         </div>
 
         {/* Header Hero */}
-        <div className="relative rounded-3xl p-5 sm:p-8 bg-gradient-to-r from-[#1A1B41] via-[#15173B] to-[#0B0D21] border border-cyan-400/30 shadow-3d-card space-y-3">
+        <div className="relative rounded-3xl p-5 sm:p-8 bg-gradient-to-r from-[#1A1B41] via-[#15173B] to-[#0B0D21] border border-cyan-400/30 shadow-3d-card space-y-4">
           <div className="flex items-center gap-3.5 sm:gap-4">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden border border-cyan-400/50 shadow-neon-cyan shrink-0 bg-[#0B0D21]">
               <img
@@ -466,436 +492,684 @@ async def upload_app(
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight flex items-center gap-2">
-                Softrova Admin Publishing Portal
+                Softrova Administration Portal
               </h1>
               <p className="text-xs sm:text-sm text-slate-300">
-                Deploy validated binaries and image galleries directly to Cloudflare Pages & R2 with client-side sanitization.
+                Deploy applications and configure corporate footer & social channels.
               </p>
             </div>
           </div>
 
-          <div className="pt-1">
+          {/* Admin Navigation Tabs */}
+          <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
             <button
               type="button"
-              onClick={() => setShowArchDocs(!showArchDocs)}
-              className="text-xs text-cyan-300 hover:text-white flex items-center gap-1.5 underline underline-offset-4 font-medium"
+              onClick={() => setActiveAdminTab('publish')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all ${
+                activeAdminTab === 'publish'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan'
+                  : 'bg-[#15173B] text-slate-400 hover:text-white'
+              }`}
             >
-              <Info size={14} />
-              <span>{showArchDocs ? 'Hide Backend Architecture Guide' : 'View FastAPI & Cloudflare R2 Architecture Guide'}</span>
+              <UploadCloud size={16} />
+              <span>Publish Applications</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveAdminTab('settings')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all ${
+                activeAdminTab === 'settings'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan'
+                  : 'bg-[#15173B] text-slate-400 hover:text-white'
+              }`}
+            >
+              <Share2 size={16} />
+              <span>Social Links & Footer Settings</span>
             </button>
           </div>
         </div>
 
-        {/* Backend Architecture Guide */}
-        {showArchDocs && (
-          <div className="rounded-3xl p-5 sm:p-6 bg-[#10122E] border border-cyan-400/40 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-cyan-300 font-bold text-xs sm:text-sm">
-                <Server size={17} />
-                <span>Cloudflare R2 + FastAPI Backend Blueprint</span>
-              </div>
+        {/* TAB 1: PUBLISH APPLICATION FORM */}
+        {activeAdminTab === 'publish' && (
+          <>
+            {/* Backend Architecture Guide Accordion */}
+            <div className="flex justify-end">
               <button
                 type="button"
-                onClick={copyCode}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/70 border border-cyan-500/40 text-xs text-cyan-300 hover:text-white transition-all"
+                onClick={() => setShowArchDocs(!showArchDocs)}
+                className="text-xs text-cyan-300 hover:text-white flex items-center gap-1.5 underline underline-offset-4 font-medium"
               >
-                {copiedCode ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-                <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
+                <Info size={14} />
+                <span>{showArchDocs ? 'Hide Backend Architecture Guide' : 'View FastAPI & Cloudflare R2 Blueprint'}</span>
               </button>
             </div>
-            <pre className="p-3.5 sm:p-4 rounded-xl bg-[#060714] text-cyan-300 text-[11px] font-mono overflow-x-auto border border-slate-800">
-              {fastApiCodeSnippet}
-            </pre>
-          </div>
-        )}
 
-        {/* Upload Success Alert */}
-        {uploadSuccess && publishedApp && (
-          <div className="rounded-3xl p-5 sm:p-6 bg-gradient-to-r from-emerald-950/90 to-[#10122E] border border-emerald-500/60 shadow-neon-cyan space-y-4 animate-fade-in">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3.5">
-                <AppIcon
-                  iconUrl={publishedApp.iconUrl}
-                  iconType={publishedApp.iconType}
-                  iconBg={publishedApp.iconBg}
-                  size="md"
-                />
-                <div>
-                  <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                    <CheckCircle2 size={18} className="text-emerald-400" />
-                    <span>"{publishedApp.name}" Published!</span>
-                  </h2>
-                  <p className="text-xs text-emerald-300/90 mt-0.5">
-                    Your app is live in the storefront catalog.
-                  </p>
+            {showArchDocs && (
+              <div className="rounded-3xl p-5 sm:p-6 bg-[#10122E] border border-cyan-400/40 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold text-xs sm:text-sm">
+                    <Server size={17} />
+                    <span>Cloudflare R2 + FastAPI Backend Blueprint</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={copyCode}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-950/70 border border-cyan-500/40 text-xs text-cyan-300 hover:text-white transition-all"
+                  >
+                    {copiedCode ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                    <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
+                  </button>
+                </div>
+                <pre className="p-3.5 sm:p-4 rounded-xl bg-[#060714] text-cyan-300 text-[11px] font-mono overflow-x-auto border border-slate-800">
+                  {fastApiCodeSnippet}
+                </pre>
+              </div>
+            )}
+
+            {/* Upload Success Alert */}
+            {uploadSuccess && publishedApp && (
+              <div className="rounded-3xl p-5 sm:p-6 bg-gradient-to-r from-emerald-950/90 to-[#10122E] border border-emerald-500/60 shadow-neon-cyan space-y-4 animate-fade-in">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <AppIcon
+                      iconUrl={publishedApp.iconUrl}
+                      iconType={publishedApp.iconType}
+                      iconBg={publishedApp.iconBg}
+                      size="md"
+                    />
+                    <div>
+                      <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                        <CheckCircle2 size={18} className="text-emerald-400" />
+                        <span>"{publishedApp.name}" Published!</span>
+                      </h2>
+                      <p className="text-xs text-emerald-300/90 mt-0.5">
+                        Your app is live in the storefront catalog.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUploadSuccess(false)}
+                    className="text-slate-400 hover:text-white text-xs px-2 py-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3 pt-1">
+                  <Link
+                    href="/"
+                    className="px-5 py-2.5 rounded-full bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan transition-all flex items-center gap-2"
+                  >
+                    <Eye size={14} className="stroke-[3]" />
+                    <span>View on Storefront</span>
+                  </Link>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setUploadSuccess(false)}
-                className="text-slate-400 hover:text-white text-xs px-2 py-1"
-              >
-                ✕
-              </button>
-            </div>
+            )}
 
-            <div className="flex items-center gap-3 pt-1">
-              <Link
-                href="/"
-                className="px-5 py-2.5 rounded-full bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan transition-all flex items-center gap-2"
-              >
-                <Eye size={14} className="stroke-[3]" />
-                <span>View on Storefront</span>
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* Main Publishing Form */}
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-3xl p-5 sm:p-8 bg-gradient-to-b from-[#1A1B41]/90 via-[#121435]/95 to-[#0B0D21] border border-cyan-400/25 shadow-3d-card space-y-6 sm:space-y-8"
-        >
-          {/* Section 1: Binary Package Payload */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
-                <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 flex items-center justify-center text-[10px]">1</span>
-                <span>Application Binary Payload (APK, ZIP, DMG, EXE)</span>
-              </label>
-              <span className="text-[11px] text-slate-400">Optional for mockup</span>
-            </div>
-
-            <div
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`relative rounded-3xl border-2 border-dashed p-6 sm:p-8 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center gap-2.5 ${
-                dragActive
-                  ? 'border-cyan-400 bg-cyan-950/30 shadow-[0_0_30px_rgba(0,229,255,0.35)] scale-[1.01]'
-                  : selectedFile
-                  ? 'border-emerald-500/60 bg-emerald-950/20'
-                  : 'border-cyan-500/30 bg-[#10122E]/80 hover:border-cyan-400/60 hover:bg-[#15173B]'
-              }`}
+            {/* Main Publishing Form */}
+            <form
+              onSubmit={handleSubmit}
+              className="rounded-3xl p-5 sm:p-8 bg-gradient-to-b from-[#1A1B41]/90 via-[#121435]/95 to-[#0B0D21] border border-cyan-400/25 shadow-3d-card space-y-6 sm:space-y-8"
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileChange}
-                accept=".apk,.zip,.exe,.dmg,.tar.gz,.deb"
-                className="hidden"
-              />
+              {/* Section 1: Binary Package Payload */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 flex items-center justify-center text-[10px]">1</span>
+                    <span>Application Binary Payload (APK, ZIP, DMG, EXE)</span>
+                  </label>
+                  <span className="text-[11px] text-slate-400">Optional for preview</span>
+                </div>
 
-              <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 text-cyan-400 shadow-neon-cyan">
-                {selectedFile ? (
-                  <FileCheck2 size={28} className="text-emerald-400" />
-                ) : (
-                  <UploadCloud size={28} className="text-cyan-400 animate-pulse" />
+                <div
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`relative rounded-3xl border-2 border-dashed p-6 sm:p-8 text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center gap-2.5 ${
+                    dragActive
+                      ? 'border-cyan-400 bg-cyan-950/30 shadow-[0_0_30px_rgba(0,229,255,0.35)] scale-[1.01]'
+                      : selectedFile
+                      ? 'border-emerald-500/60 bg-emerald-950/20'
+                      : 'border-cyan-500/30 bg-[#10122E]/80 hover:border-cyan-400/60 hover:bg-[#15173B]'
+                  }`}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleFileChange}
+                    accept=".apk,.zip,.exe,.dmg,.tar.gz,.deb"
+                    className="hidden"
+                  />
+
+                  <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-400/30 text-cyan-400 shadow-neon-cyan">
+                    {selectedFile ? (
+                      <FileCheck2 size={28} className="text-emerald-400" />
+                    ) : (
+                      <UploadCloud size={28} className="text-cyan-400 animate-pulse" />
+                    )}
+                  </div>
+
+                  {selectedFile ? (
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-white flex items-center justify-center gap-2 truncate max-w-full px-2">
+                        <span className="truncate">{selectedFile.name}</span>
+                        <span className="text-xs text-emerald-400 font-mono shrink-0">
+                          ({(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)
+                        </span>
+                      </p>
+                      <p className="text-xs text-slate-400">Click or drag to replace package</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="text-xs sm:text-sm font-bold text-white">
+                        Drag and drop binary package, or <span className="text-cyan-400 underline">browse file</span>
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Supports Android APK, Windows EXE, macOS DMG, and ZIP archives (max 500MB)
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {fileError && (
+                  <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                    <AlertTriangle size={14} className="shrink-0" />
+                    <span>{fileError}</span>
+                  </div>
+                )}
+
+                {fileHash && (
+                  <div className="p-2.5 sm:p-3 rounded-xl bg-[#0B0D21] border border-cyan-500/30 flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 font-mono text-[11px] truncate">
+                      <span className="text-cyan-400 font-bold uppercase">SHA-256:</span>
+                      <span className="text-slate-300 truncate">{fileHash}</span>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30 shrink-0">
+                      Verified
+                    </span>
+                  </div>
                 )}
               </div>
 
-              {selectedFile ? (
-                <div className="space-y-1">
-                  <p className="text-sm font-bold text-white flex items-center justify-center gap-2 truncate max-w-full px-2">
-                    <span className="truncate">{selectedFile.name}</span>
-                    <span className="text-xs text-emerald-400 font-mono shrink-0">
-                      ({(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)
-                    </span>
-                  </p>
-                  <p className="text-xs text-slate-400">Click or drag to replace package</p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <p className="text-xs sm:text-sm font-bold text-white">
-                    Drag and drop binary package, or <span className="text-cyan-400 underline">browse file</span>
-                  </p>
-                  <p className="text-[11px] text-slate-400">
-                    Supports Android APK, Windows EXE, macOS DMG, and ZIP archives (max 500MB)
-                  </p>
-                </div>
-              )}
-            </div>
+              {/* Section 2: App Visual Assets */}
+              <div className="space-y-5 pt-4 border-t border-slate-800">
+                <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 flex items-center justify-center text-[10px]">2</span>
+                  <span>App Visual Assets (Icon & Screenshots Upload)</span>
+                </label>
 
-            {fileError && (
-              <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
-                <AlertTriangle size={14} className="shrink-0" />
-                <span>{fileError}</span>
-              </div>
-            )}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+                  {/* App Icon Upload */}
+                  <div className="md:col-span-5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-300">
+                        App Icon (PNG, JPG, WebP, SVG)
+                      </span>
+                      {iconPreview && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIconFile(null);
+                            setIconPreview('');
+                          }}
+                          className="text-[10px] text-rose-400 hover:text-rose-300 underline"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
 
-            {fileHash && (
-              <div className="p-2.5 sm:p-3 rounded-xl bg-[#0B0D21] border border-cyan-500/30 flex items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2 font-mono text-[11px] truncate">
-                  <span className="text-cyan-400 font-bold uppercase">SHA-256:</span>
-                  <span className="text-slate-300 truncate">{fileHash}</span>
-                </div>
-                <span className="text-[10px] font-bold uppercase text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30 shrink-0">
-                  Verified
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Section 2: App Visual Assets (Icon & Screenshots) */}
-          <div className="space-y-5 pt-4 border-t border-slate-800">
-            <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 flex items-center justify-center text-[10px]">2</span>
-              <span>App Visual Assets (Icon & Screenshots Upload)</span>
-            </label>
-
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
-              {/* App Icon Upload */}
-              <div className="md:col-span-5 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-300">
-                    App Icon (PNG, JPG, WebP, SVG)
-                  </span>
-                  {iconPreview && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIconFile(null);
-                        setIconPreview('');
-                      }}
-                      className="text-[10px] text-rose-400 hover:text-rose-300 underline"
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#10122E] border border-slate-700/80">
-                  <div className="shrink-0">
-                    <AppIcon
-                      iconUrl={iconPreview}
-                      iconType="sparkles"
-                      iconBg="from-cyan-400 via-blue-600 to-indigo-950"
-                      size="lg"
-                    />
+                    <div className="flex items-center gap-3.5 p-3.5 rounded-2xl bg-[#10122E] border border-slate-700/80">
+                      <div className="shrink-0">
+                        <AppIcon
+                          iconUrl={iconPreview}
+                          iconType="sparkles"
+                          iconBg="from-cyan-400 via-blue-600 to-indigo-950"
+                          size="lg"
+                        />
+                      </div>
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <input
+                          ref={iconInputRef}
+                          type="file"
+                          onChange={handleIconChange}
+                          accept="image/*"
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => iconInputRef.current?.click()}
+                          className="w-full px-3 py-2 rounded-xl bg-[#15173B] hover:bg-[#1A1B41] border border-cyan-500/40 text-cyan-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                        >
+                          <ImageIcon size={13} />
+                          <span className="truncate">{iconPreview ? 'Change Icon' : 'Upload Icon'}</span>
+                        </button>
+                        <p className="text-[10px] text-slate-400">
+                          Square 512×512px or 1024×1024px transparent PNG.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-1.5 flex-1 min-w-0">
+
+                  {/* Screenshots Gallery */}
+                  <div className="md:col-span-7 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-300">
+                        Screenshots ({screenshotsPreviews.length} uploaded)
+                      </span>
+                      {screenshotsPreviews.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setScreenshotsPreviews([])}
+                          className="text-[10px] text-rose-400 hover:text-rose-300 underline"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
                     <input
-                      ref={iconInputRef}
+                      ref={screenshotsInputRef}
                       type="file"
-                      onChange={handleIconChange}
+                      multiple
+                      onChange={handleScreenshotsChange}
                       accept="image/*"
                       className="hidden"
                     />
-                    <button
-                      type="button"
-                      onClick={() => iconInputRef.current?.click()}
-                      className="w-full px-3 py-2 rounded-xl bg-[#15173B] hover:bg-[#1A1B41] border border-cyan-500/40 text-cyan-300 hover:text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
-                    >
-                      <ImageIcon size={13} />
-                      <span className="truncate">{iconPreview ? 'Change Icon' : 'Upload Icon'}</span>
-                    </button>
-                    <p className="text-[10px] text-slate-400">
-                      Square 512×512px or 1024×1024px transparent PNG.
-                    </p>
+
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 p-3.5 rounded-2xl bg-[#10122E] border border-slate-700/80 min-h-[130px]">
+                      {screenshotsPreviews.map((src, index) => (
+                        <div
+                          key={index}
+                          className="relative group aspect-video rounded-xl overflow-hidden border border-cyan-500/30 bg-[#0B0D21]"
+                        >
+                          <img src={src} alt={`Screenshot ${index + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => removeScreenshot(index)}
+                            className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={() => screenshotsInputRef.current?.click()}
+                        className="aspect-video rounded-xl border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 bg-[#15173B]/50 hover:bg-[#1A1B41] flex flex-col items-center justify-center gap-1 text-cyan-300 hover:text-white transition-all min-h-[70px]"
+                      >
+                        <Plus size={18} />
+                        <span className="text-[10px] font-bold">Add Image</span>
+                      </button>
+                    </div>
                   </div>
+                </div>
+
+                {imageError && (
+                  <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                    <AlertTriangle size={14} className="shrink-0" />
+                    <span>{imageError}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 3: Metadata Form */}
+              <div className="space-y-4 pt-4 border-t border-slate-800">
+                <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 flex items-center justify-center text-[10px]">3</span>
+                  <span>Application Metadata & Release Notes</span>
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-300">
+                      App Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Softrova Neural Studio"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      maxLength={80}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-300">
+                      Package ID
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="com.softrova.app"
+                      value={formData.packageId}
+                      onChange={(e) => setFormData({ ...formData, packageId: e.target.value })}
+                      maxLength={100}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-400"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-300">
+                      Version
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="1.0.0"
+                      value={formData.version}
+                      onChange={(e) => setFormData({ ...formData, version: e.target.value })}
+                      maxLength={20}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-cyan-400"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-300">
+                      Category *
+                    </label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          category: e.target.value as Exclude<AppCategory, 'All'>,
+                        })
+                      }
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                    >
+                      {categories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">
+                    Short Tagline
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="High performance AI workspace for neural developers"
+                    value={formData.shortDescription}
+                    onChange={(e) =>
+                      setFormData({ ...formData, shortDescription: e.target.value })
+                    }
+                    maxLength={180}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">
+                    Full Description
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Detailed explanation of features, security guarantees, and changelog updates..."
+                    value={formData.fullDescription}
+                    onChange={(e) =>
+                      setFormData({ ...formData, fullDescription: e.target.value })
+                    }
+                    maxLength={2000}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
                 </div>
               </div>
 
-              {/* Screenshots Gallery */}
-              <div className="md:col-span-7 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-300">
-                    Screenshots ({screenshotsPreviews.length} uploaded)
-                  </span>
-                  {screenshotsPreviews.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setScreenshotsPreviews([])}
-                      className="text-[10px] text-rose-400 hover:text-rose-300 underline"
-                    >
-                      Clear
-                    </button>
-                  )}
+              {/* Submit Action */}
+              <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <ShieldCheck size={16} className="text-cyan-400 shrink-0" />
+                  <span>Signed with Softrova Master Publisher Certificate</span>
                 </div>
 
-                <input
-                  ref={screenshotsInputRef}
-                  type="file"
-                  multiple
-                  onChange={handleScreenshotsChange}
-                  accept="image/*"
-                  className="hidden"
-                />
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-sm uppercase tracking-wider shadow-neon-cyan hover:shadow-neon-cyan-lg transition-all flex items-center justify-center gap-2.5 min-h-[44px] ${
+                    isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:scale-105 active:scale-95'
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 rounded-full border-2 border-slate-950 border-t-transparent animate-spin" />
+                      <span>Streaming to Cloudflare R2...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud size={18} className="stroke-[2.5]" />
+                      <span>Publish to Softrova Store</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </>
+        )}
 
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5 p-3.5 rounded-2xl bg-[#10122E] border border-slate-700/80 min-h-[130px]">
-                  {screenshotsPreviews.map((src, index) => (
-                    <div
-                      key={index}
-                      className="relative group aspect-video rounded-xl overflow-hidden border border-cyan-500/30 bg-[#0B0D21]"
-                    >
-                      <img src={src} alt={`Screenshot ${index + 1}`} className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => removeScreenshot(index)}
-                        className="absolute top-1 right-1 p-1 rounded-md bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  ))}
+        {/* TAB 2: STORE & SOCIAL MEDIA SETTINGS */}
+        {activeAdminTab === 'settings' && (
+          <form
+            onSubmit={handleSaveSettings}
+            className="rounded-3xl p-5 sm:p-8 bg-gradient-to-b from-[#1A1B41]/90 via-[#121435]/95 to-[#0B0D21] border border-cyan-400/25 shadow-3d-card space-y-6"
+          >
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
+                <Share2 size={20} className="text-cyan-400" />
+                <span>Corporate Social Media & Footer Customizer</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Customize your official community links, support email, and brand tagline displayed in the store footer.
+              </p>
+            </div>
 
-                  <button
-                    type="button"
-                    onClick={() => screenshotsInputRef.current?.click()}
-                    className="aspect-video rounded-xl border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 bg-[#15173B]/50 hover:bg-[#1A1B41] flex flex-col items-center justify-center gap-1 text-cyan-300 hover:text-white transition-all min-h-[70px]"
-                  >
-                    <Plus size={18} />
-                    <span className="text-[10px] font-bold">Add Image</span>
-                  </button>
+            {settingsSaved && (
+              <div className="p-3.5 rounded-2xl bg-emerald-950/70 border border-emerald-500/60 text-emerald-300 text-xs flex items-center gap-2 shadow-neon-cyan animate-fade-in">
+                <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+                <span>Settings successfully saved! The footer has been updated across the entire storefront.</span>
+              </div>
+            )}
+
+            {/* Social Media URL Inputs */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+                Official Social Media Channels
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">
+                    Twitter / X Profile URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://twitter.com/softrova"
+                    value={siteSettings.socials.twitter}
+                    onChange={(e) =>
+                      setSiteSettings({
+                        ...siteSettings,
+                        socials: { ...siteSettings.socials, twitter: e.target.value },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">
+                    LinkedIn Organization URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://linkedin.com/company/softrova"
+                    value={siteSettings.socials.linkedin}
+                    onChange={(e) =>
+                      setSiteSettings({
+                        ...siteSettings,
+                        socials: { ...siteSettings.socials, linkedin: e.target.value },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">
+                    GitHub Organization URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://github.com/softrova"
+                    value={siteSettings.socials.github}
+                    onChange={(e) =>
+                      setSiteSettings({
+                        ...siteSettings,
+                        socials: { ...siteSettings.socials, github: e.target.value },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">
+                    Discord Community Server URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://discord.gg/softrova"
+                    value={siteSettings.socials.discord}
+                    onChange={(e) =>
+                      setSiteSettings({
+                        ...siteSettings,
+                        socials: { ...siteSettings.socials, discord: e.target.value },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">
+                    YouTube Channel URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://youtube.com/@softrova"
+                    value={siteSettings.socials.youtube}
+                    onChange={(e) =>
+                      setSiteSettings({
+                        ...siteSettings,
+                        socials: { ...siteSettings.socials, youtube: e.target.value },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">
+                    Official Website URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://softrova.com"
+                    value={siteSettings.socials.website}
+                    onChange={(e) =>
+                      setSiteSettings({
+                        ...siteSettings,
+                        socials: { ...siteSettings.socials, website: e.target.value },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
                 </div>
               </div>
             </div>
 
-            {imageError && (
-              <div className="p-2.5 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
-                <AlertTriangle size={14} className="shrink-0" />
-                <span>{imageError}</span>
+            {/* General Brand Info */}
+            <div className="space-y-4 pt-4 border-t border-slate-800">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-300">
+                Contact & Footer Bio
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">
+                    Public Support / Business Email
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="contact@softrova.com"
+                    value={siteSettings.supportEmail}
+                    onChange={(e) =>
+                      setSiteSettings({
+                        ...siteSettings,
+                        supportEmail: e.target.value,
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300">
+                    Copyright Notice
+                  </label>
+                  <input
+                    type="text"
+                    value={siteSettings.copyrightText}
+                    onChange={(e) =>
+                      setSiteSettings({
+                        ...siteSettings,
+                        copyrightText: e.target.value,
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
               </div>
-            )}
-          </div>
 
-          {/* Section 3: Metadata Form */}
-          <div className="space-y-4 pt-4 border-t border-slate-800">
-            <label className="text-xs font-bold uppercase tracking-wider text-cyan-300 flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-400/40 flex items-center justify-center text-[10px]">3</span>
-              <span>Application Metadata & Release Notes</span>
-            </label>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-slate-300">
-                  App Name *
+                  Store Bio / Mission Statement
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Softrova Neural Studio"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  maxLength={80}
+                <textarea
+                  rows={2}
+                  value={siteSettings.tagline}
+                  onChange={(e) =>
+                    setSiteSettings({
+                      ...siteSettings,
+                      tagline: e.target.value,
+                    })
+                  }
                   className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
                 />
               </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-300">
-                  Package ID
-                </label>
-                <input
-                  type="text"
-                  placeholder="com.softrova.app"
-                  value={formData.packageId}
-                  onChange={(e) => setFormData({ ...formData, packageId: e.target.value })}
-                  maxLength={100}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-300">
-                  Version
-                </label>
-                <input
-                  type="text"
-                  placeholder="1.0.0"
-                  value={formData.version}
-                  onChange={(e) => setFormData({ ...formData, version: e.target.value })}
-                  maxLength={20}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white font-mono focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-slate-300">
-                  Category *
-                </label>
-                <select
-                  value={formData.category}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      category: e.target.value as Exclude<AppCategory, 'All'>,
-                    })
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
-                >
-                  {categories.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">
-                Short Tagline
-              </label>
-              <input
-                type="text"
-                placeholder="High performance AI workspace for neural developers"
-                value={formData.shortDescription}
-                onChange={(e) =>
-                  setFormData({ ...formData, shortDescription: e.target.value })
-                }
-                maxLength={180}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-              />
+            {/* Save Button */}
+            <div className="pt-4 border-t border-slate-800 flex justify-end">
+              <button
+                type="submit"
+                className="px-8 py-3 rounded-2xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan hover:shadow-neon-cyan-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+              >
+                <Check size={16} className="stroke-[3]" />
+                <span>Save Social & Footer Settings</span>
+              </button>
             </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-300">
-                Full Description
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Detailed explanation of features, security guarantees, and changelog updates..."
-                value={formData.fullDescription}
-                onChange={(e) =>
-                  setFormData({ ...formData, fullDescription: e.target.value })
-                }
-                maxLength={2000}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-              />
-            </div>
-          </div>
-
-          {/* Submit Action */}
-          <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <ShieldCheck size={16} className="text-cyan-400 shrink-0" />
-              <span>Signed with Softrova Master Publisher Certificate</span>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className={`w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-sm uppercase tracking-wider shadow-neon-cyan hover:shadow-neon-cyan-lg transition-all flex items-center justify-center gap-2.5 min-h-[44px] ${
-                isSubmitting ? 'opacity-70 cursor-not-allowed' : 'hover:scale-105 active:scale-95'
-              }`}
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="w-4 h-4 rounded-full border-2 border-slate-950 border-t-transparent animate-spin" />
-                  <span>Streaming to Cloudflare R2...</span>
-                </>
-              ) : (
-                <>
-                  <UploadCloud size={18} className="stroke-[2.5]" />
-                  <span>Publish to Softrova Store</span>
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+          </form>
+        )}
 
       </div>
     </div>
