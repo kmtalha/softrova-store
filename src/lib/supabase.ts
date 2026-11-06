@@ -161,6 +161,21 @@ export async function updateSupabaseSpotlight(appId: string, featured: boolean):
 }
 
 /**
+ * Delete an app from Supabase
+ */
+export async function deleteSupabaseApp(appId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+
+  try {
+    const { error } = await supabase.from('apps').delete().eq('id', appId);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Fetch categories from Supabase
  */
 export async function fetchSupabaseCategories(): Promise<string[] | null> {

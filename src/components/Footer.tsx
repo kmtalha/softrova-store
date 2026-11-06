@@ -12,19 +12,37 @@ import {
 } from 'lucide-react';
 import { DEFAULT_SITE_SETTINGS } from '@/data/settings';
 import { SiteSettings } from '@/types/settings';
+import { getSupabase } from '@/lib/supabase';
 
 export default function Footer() {
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('softrova_site_settings');
-      if (stored) {
-        setSettings(JSON.parse(stored));
+    async function loadFooterSettings() {
+      try {
+        const supabase = getSupabase();
+        if (supabase) {
+          const { data } = await supabase.from('site_settings').select('*').eq('id', 'default').maybeSingle();
+          if (data) {
+            setSettings({
+              storeName: DEFAULT_SITE_SETTINGS.storeName,
+              tagline: data.tagline || DEFAULT_SITE_SETTINGS.tagline,
+              supportEmail: data.support_email || DEFAULT_SITE_SETTINGS.supportEmail,
+              copyrightText: data.copyright_text || DEFAULT_SITE_SETTINGS.copyrightText,
+              socials: data.socials || DEFAULT_SITE_SETTINGS.socials,
+            });
+            return;
+          }
+        }
+        const stored = localStorage.getItem('softrova_site_settings');
+        if (stored) {
+          setSettings(JSON.parse(stored));
+        }
+      } catch {
+        // Fallback to default
       }
-    } catch {
-      // Fallback to default
     }
+    loadFooterSettings();
   }, []);
 
   return (

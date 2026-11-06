@@ -45,6 +45,7 @@ import {
   fetchSupabaseCategories,
   insertSupabaseCategory,
   deleteSupabaseCategory,
+  deleteSupabaseApp,
   uploadToSupabaseStorage,
 } from '@/lib/supabase';
 import AppIcon from '@/components/AppIcon';
@@ -109,6 +110,8 @@ export default function AdminUploadPage() {
   const [publishedApp, setPublishedApp] = useState<AppItem | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [showArchDocs, setShowArchDocs] = useState(false);
+  const [isSyncingApps, setIsSyncingApps] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
 
   // Site & Social Media Settings State
   const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
@@ -292,6 +295,33 @@ export default function AdminUploadPage() {
     } catch (e) {
       console.error('Failed to update spotlight:', e);
     }
+  };
+
+  // Delete App from Store & Database
+  const handleDeleteApp = async (appId: string, appName: string) => {
+    if (!confirm(`Are you sure you want to remove "${appName}" from Softrova Store?`)) return;
+
+    if (supabaseConnected) {
+      await deleteSupabaseApp(appId);
+    }
+
+    setAppsList((prev) => prev.filter((a) => a.id !== appId));
+
+    try {
+      const stored = localStorage.getItem('softrova_custom_apps');
+      if (stored) {
+        const customApps = JSON.parse(stored);
+        if (Array.isArray(customApps)) {
+          localStorage.setItem(
+            'softrova_custom_apps',
+            JSON.stringify(customApps.filter((a: any) => a.id !== appId))
+          );
+        }
+      }
+    } catch {}
+
+    setSpotlightSuccessMsg(`"${appName}" was removed from the store.`);
+    setTimeout(() => setSpotlightSuccessMsg(''), 3000);
   };
 
   // CATEGORY MANAGER: Add New Category
@@ -575,14 +605,49 @@ export default function AdminUploadPage() {
   };
 
   // Save Social & Footer Settings
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      if (supabaseConnected) {
+        const supabase = getSupabase();
+        if (supabase) {
+          await supabase.from('site_settings').upsert({
+            id: 'default',
+            tagline: siteSettings.tagline,
+            support_email: siteSettings.supportEmail,
+            copyright_text: siteSettings.copyrightText,
+            socials: siteSettings.socials,
+          });
+        }
+      }
       localStorage.setItem('softrova_site_settings', JSON.stringify(siteSettings));
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 3000);
     } catch (err) {
       console.error('Failed to save settings:', err);
+    }
+  };
+
+  // Sync Showcase Apps to Supabase Database
+  const handleSeedApps = async () => {
+    if (!supabaseConnected) return;
+    setIsSyncingApps(true);
+    setSyncMsg('');
+    try {
+      for (const app of INITIAL_APPS) {
+        await insertSupabaseApp(app);
+      }
+      const refreshed = await fetchSupabaseApps();
+      if (refreshed && refreshed.length > 0) {
+        setAppsList(refreshed);
+      }
+      setSyncMsg('All 6 showcase apps successfully synced to Supabase PostgreSQL!');
+      setTimeout(() => setSyncMsg(''), 4000);
+    } catch (e) {
+      console.error(e);
+      setSyncMsg('Failed to sync apps.');
+    } finally {
+      setIsSyncingApps(false);
     }
   };
 
@@ -1357,18 +1422,29 @@ async def upload_app(
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => toggleSpotlight(app.id)}
-                      className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all ${
-                        isFeatured
-                          ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-neon-yellow hover:scale-105'
-                          : 'bg-[#10122E] border border-slate-700 text-slate-400 hover:text-white hover:border-cyan-400'
-                      }`}
-                    >
-                      <Star size={13} className={isFeatured ? 'fill-slate-950' : ''} />
-                      <span>{isFeatured ? 'Featured ★' : 'Feature in Spotlight'}</span>
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => toggleSpotlight(app.id)}
+                        className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${
+                          isFeatured
+                            ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 shadow-neon-yellow hover:scale-105'
+                            : 'bg-[#10122E] border border-slate-700 text-slate-400 hover:text-white hover:border-cyan-400'
+                        }`}
+                      >
+                        <Star size={13} className={isFeatured ? 'fill-slate-950' : ''} />
+                        <span>{isFeatured ? 'Featured ★' : 'Feature in Spotlight'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteApp(app.id, app.name)}
+                        title={`Delete ${app.name}`}
+                        className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-all hover:scale-105"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1725,6 +1801,30 @@ async def upload_app(
                   </div>
                 </div>
               </div>
+
+              {/* Seed / Sync Action Bar */}
+              <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-400">
+                  Quickly push the 6 default showcase apps directly into your Supabase database table:
+                </p>
+
+                <button
+                  type="button"
+                  disabled={isSyncingApps || !supabaseConnected}
+                  onClick={handleSeedApps}
+                  className="px-4 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 hover:text-white border border-cyan-400/40 text-xs font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                >
+                  <Sparkles size={14} className={isSyncingApps ? 'animate-spin' : ''} />
+                  <span>{isSyncingApps ? 'Syncing Apps...' : 'Sync 6 Showcase Apps to Supabase'}</span>
+                </button>
+              </div>
+
+              {syncMsg && (
+                <div className="p-3 rounded-xl bg-emerald-950/70 border border-emerald-500/60 text-emerald-300 text-xs flex items-center gap-2 animate-fade-in">
+                  <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                  <span>{syncMsg}</span>
+                </div>
+              )}
             </div>
 
             {/* Quick Setup Instructions */}

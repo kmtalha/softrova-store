@@ -117,12 +117,17 @@ export default function StorefrontPage() {
           setTimeout(() => {
             setDownloadingAppId(null);
             setDownloadProgress(0);
-          }, 800);
+
+            // Trigger real download if valid URL provided
+            if (app.downloadUrl && (app.downloadUrl.startsWith('https://') || app.downloadUrl.startsWith('http://'))) {
+              window.open(app.downloadUrl, '_blank', 'noopener,noreferrer');
+            }
+          }, 600);
           return 100;
         }
         return prev + 25;
       });
-    }, 250);
+    }, 200);
   };
 
   // Schema.org ItemList for Google App Store Carousel indexing
