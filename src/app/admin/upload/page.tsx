@@ -59,16 +59,14 @@ import {
 export default function AdminUploadPage() {
   const router = useRouter();
 
-  // Authentication Gate State
+  // Authentication Gate State (Strict Supabase Auth)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [passcode, setPasscode] = useState<string>('');
   const [emailInput, setEmailInput] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [adminUserEmail, setAdminUserEmail] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
   const [lockoutSeconds, setLockoutSeconds] = useState<number>(0);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
-  const [authMode, setAuthMode] = useState<'passcode' | 'supabase'>('passcode');
 
   // Active Admin Tab: 'publish' | 'spotlight' | 'categories' | 'settings' | 'supabase'
   const [activeAdminTab, setActiveAdminTab] = useState<'publish' | 'spotlight' | 'categories' | 'settings' | 'supabase'>('publish');
@@ -127,6 +125,7 @@ export default function AdminUploadPage() {
     shortDescription: '',
     fullDescription: '',
     permissions: 'Local Storage, Network Access',
+    downloadUrl: '',
   });
 
   // Check session, load categories, apps & spotlight map
@@ -165,10 +164,6 @@ export default function AdminUploadPage() {
           if (sbCats && sbCats.length > 0) {
             setCategories(sbCats);
           }
-        }
-
-        if (sessionStorage.getItem('softrova_admin_auth') === 'verified') {
-          setIsAuthenticated(true);
         }
 
         // 1. Fallback Categories
@@ -218,31 +213,11 @@ export default function AdminUploadPage() {
     initAdmin();
   }, []);
 
-  // Auth submission: Supabase Email/Password or Master Key
+  // Auth submission: Strict Supabase Email & Password
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
 
-    const supabase = getSupabase();
-    if (authMode === 'supabase' && supabase && emailInput.trim() && passwordInput) {
-      setIsLoggingIn(true);
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: emailInput.trim(),
-        password: passwordInput,
-      });
-      setIsLoggingIn(false);
-      if (error) {
-        setAuthError(error.message);
-        return;
-      }
-      if (data?.session) {
-        setIsAuthenticated(true);
-        setAdminUserEmail(data.user.email || 'Admin');
-        return;
-      }
-    }
-
-    // Master Passcode verification
     const rateCheck = checkRateLimit('admin_auth', 5, 30000);
     if (!rateCheck.allowed) {
       setLockoutSeconds(rateCheck.waitSeconds || 30);
@@ -250,13 +225,32 @@ export default function AdminUploadPage() {
       return;
     }
 
-    if (passcode.trim() === 'softrova2026' || passcode.trim() === 'admin') {
+    const supabase = getSupabase();
+    if (!supabase) {
+      setAuthError('Supabase is not configured. Please verify .env.local.');
+      return;
+    }
+
+    if (!emailInput.trim() || !passwordInput) {
+      setAuthError('Please enter both admin email and password.');
+      return;
+    }
+
+    setIsLoggingIn(true);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: emailInput.trim(),
+      password: passwordInput,
+    });
+    setIsLoggingIn(false);
+
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+
+    if (data?.session) {
       setIsAuthenticated(true);
-      try {
-        sessionStorage.setItem('softrova_admin_auth', 'verified');
-      } catch {}
-    } else {
-      setAuthError('Invalid Master Access Key. Access Denied.');
+      setAdminUserEmail(data.user.email || 'Admin');
     }
   };
 
@@ -265,9 +259,6 @@ export default function AdminUploadPage() {
     if (supabase) {
       await supabase.auth.signOut();
     }
-    try {
-      sessionStorage.removeItem('softrova_admin_auth');
-    } catch {}
     setIsAuthenticated(false);
     setAdminUserEmail('');
   };
@@ -478,7 +469,7 @@ export default function AdminUploadPage() {
     try {
       let finalIconUrl = iconPreview || undefined;
       const finalScreenshots: string[] = [...screenshotsPreviews];
-      let finalDownloadUrl = '#';
+      let finalDownloadUrl = formData.downloadUrl.trim() || '#';
 
       // 1. If Supabase is connected, upload assets directly to Supabase Storage Buckets
       if (supabaseConnected) {
@@ -652,129 +643,62 @@ async def upload_app(
             </div>
             <div>
               <h1 className="text-xl font-black text-white tracking-wide">
-                Softrova Security Console
+                Softrova Admin Authentication
               </h1>
               <p className="text-xs text-slate-400 mt-1">
-                Enter Master Key to access the administration dashboard.
+                Enter your Supabase administrator credentials to manage the store.
               </p>
             </div>
           </div>
 
-          {/* Auth Method Selector */}
-          <div className="flex rounded-xl bg-[#0F1128] p-1 border border-slate-800">
-            <button
-              type="button"
-              onClick={() => { setAuthMode('passcode'); setAuthError(''); }}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                authMode === 'passcode'
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Master Key
-            </button>
-            <button
-              type="button"
-              onClick={() => { setAuthMode('supabase'); setAuthError(''); }}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                authMode === 'supabase'
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Supabase Auth {supabaseConnected && <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1"></span>}
-            </button>
-          </div>
+          <form onSubmit={handleAuthSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Admin Email Address
+              </label>
+              <input
+                type="email"
+                required
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="admin@softrova.com"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+              />
+            </div>
 
-          {authMode === 'passcode' ? (
-            <form onSubmit={handleAuthSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
-                  <span>Master Access Key</span>
-                  <span className="text-[10px] text-cyan-400 font-mono">Default: softrova2026</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    required
-                    value={passcode}
-                    onChange={(e) => setPasscode(e.target.value)}
-                    placeholder="Enter administrator passcode..."
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400 font-mono"
-                  />
-                  <Key size={16} className="absolute left-3 top-3 text-cyan-400" />
-                </div>
-              </div>
-
-              {authError && (
-                <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
-                  <AlertTriangle size={14} className="shrink-0" />
-                  <span>{authError}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={lockoutSeconds > 0}
-                className="w-full py-3 rounded-xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan transition-all flex items-center justify-center gap-2"
-              >
-                <Lock size={14} />
-                <span>Unlock with Master Key</span>
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleAuthSubmit} className="space-y-3.5">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">
-                  Supabase Admin Email
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="admin@softrova.com"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-300">
-                  Admin Password
-                </label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                Admin Password
+              </label>
+              <div className="relative">
                 <input
                   type="password"
                   required
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 font-mono"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 font-mono"
                 />
+                <Key size={16} className="absolute left-3 top-3 text-cyan-400" />
               </div>
+            </div>
 
-              {authError && (
-                <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
-                  <AlertTriangle size={14} className="shrink-0" />
-                  <span>{authError}</span>
-                </div>
-              )}
+            {authError && (
+              <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/50 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle size={14} className="shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
 
-              <button
-                type="submit"
-                disabled={isLoggingIn}
-                className="w-full py-3 rounded-xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <Lock size={14} />
-                <span>{isLoggingIn ? 'Authenticating...' : 'Sign In with Supabase'}</span>
-              </button>
-
-              {!supabaseConnected && (
-                <p className="text-[11px] text-amber-400/90 text-center pt-1">
-                  Supabase credentials not yet configured in .env.local. Unlock instantly using Master Key.
-                </p>
-              )}
-            </form>
-          )}
+            <button
+              type="submit"
+              disabled={isLoggingIn || lockoutSeconds > 0}
+              className="w-full py-3 rounded-xl bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Lock size={14} />
+              <span>{isLoggingIn ? 'Authenticating...' : 'Sign In to Admin Portal'}</span>
+            </button>
+          </form>
 
           <div className="text-center pt-2">
             <Link
@@ -1321,6 +1245,22 @@ async def upload_app(
                     }
                     maxLength={2000}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-slate-300 flex items-center justify-between">
+                    <span>Direct Download URL (Optional)</span>
+                    <span className="text-[10px] text-cyan-400 font-medium">Cloudflare R2 / Drive / GitHub — Best for apps &gt; 50MB</span>
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://cdn.softrova.com/downloads/app.apk or Google Drive Link"
+                    value={formData.downloadUrl}
+                    onChange={(e) =>
+                      setFormData({ ...formData, downloadUrl: e.target.value })
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono text-xs"
                   />
                 </div>
               </div>
