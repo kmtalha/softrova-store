@@ -49,7 +49,7 @@ export default function Footer() {
                   SOFTROVA
                 </span>
                 <span className="text-[10px] text-cyan-400 font-mono tracking-widest uppercase">
-                  Solution Applications
+                  Solution
                 </span>
               </div>
             </Link>
@@ -262,9 +262,6 @@ export default function Footer() {
           <p>{settings.copyrightText}</p>
 
           <div className="flex items-center gap-4">
-            <span className="text-slate-400">Strict Dark Protocol</span>
-            <span className="text-slate-700">•</span>
-            
             {/* Discreet Admin Lock Link */}
             <Link
               href="/admin/upload/"

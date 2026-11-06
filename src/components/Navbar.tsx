@@ -67,7 +67,7 @@ export default function Navbar({
                 </span>
               </div>
               <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium tracking-wide">
-                Solution Applications
+                Solution
               </span>
             </div>
           </Link>
@@ -113,20 +113,9 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Right Action: Discreet Futuristic Lock Icon for Admin Console */}
+          {/* Right Action Area - Clean Header */}
           <div className="flex items-center gap-3">
-            <Link
-              href="/admin/upload/"
-              aria-label="Staff Console"
-              title="Secure Admin Access"
-              className="relative group p-2.5 sm:px-3 sm:py-2.5 rounded-xl bg-[#10122E] border border-cyan-500/20 hover:border-cyan-400/60 text-slate-400 hover:text-cyan-300 transition-all shadow-sm hover:shadow-neon-cyan flex items-center gap-2"
-            >
-              <Lock size={16} className="text-cyan-400 group-hover:scale-110 transition-transform" />
-              <span className="hidden lg:inline text-xs font-mono font-medium tracking-wider text-slate-300 group-hover:text-cyan-300">
-                ADMIN
-              </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400/70 group-hover:bg-cyan-300 animate-pulse" />
-            </Link>
+            {/* Intentionally minimal without admin buttons */}
           </div>
 
         </div>
