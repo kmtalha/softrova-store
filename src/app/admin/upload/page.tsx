@@ -270,10 +270,6 @@ export default function AdminUploadPage() {
     }
 
     const supabase = getSupabase();
-    if (!supabase) {
-      setAuthError('Supabase is not configured. Please verify .env.local.');
-      return;
-    }
 
     if (!emailInput.trim() || !passwordInput) {
       setAuthError('Please enter both admin email and password.');

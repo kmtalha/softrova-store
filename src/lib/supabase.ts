@@ -9,22 +9,17 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = (): boolean => {
-  return (
-    typeof window !== 'undefined' &&
-    !!supabaseUrl &&
-    supabaseUrl.startsWith('https://') &&
-    !!supabaseAnonKey &&
-    supabaseAnonKey.length > 20
-  );
+  return true;
 };
 
 // Singleton client instance
 let supabaseInstance: SupabaseClient | null = null;
 
-export const getSupabase = (): SupabaseClient | null => {
-  if (!supabaseUrl || !supabaseAnonKey) return null;
+export const getSupabase = (): SupabaseClient => {
+  const url = supabaseUrl || DEFAULT_SUPABASE_URL;
+  const key = supabaseAnonKey || DEFAULT_SUPABASE_ANON_KEY;
   if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+    supabaseInstance = createClient(url, key, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
