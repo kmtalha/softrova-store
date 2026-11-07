@@ -107,3 +107,12 @@ body {
   background: #00E5FF;
   color: #0B0D21;
 }
+
+/* Hide native browser password reveal / clear buttons (Edge / Chrome / Chromium) */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  pointer-events: none !important;
+}
