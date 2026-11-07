@@ -1,6 +1,41 @@
+# Softrova Solutions - Official Robots Policy
+# Permits standard web crawlers and next-generation AI retrieval agents
+
 User-agent: *
 Allow: /
 Disallow: /admin/
 Disallow: /private/
+Disallow: /api/private/
 
+# Explicitly welcome AI Search & Reasoning Bots
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+# Sitemap & LLMs Manifest
 Sitemap: https://store.softrova.com/sitemap.xml
+# AI Assistant Knowledge Manifest
+# See https://store.softrova.com/llms.txt

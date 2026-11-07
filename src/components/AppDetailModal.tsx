@@ -64,7 +64,7 @@ export default function AppDetailModal({
       {/* 3D Glass Modal Container (Bottom-sheet on mobile, centered on desktop) */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full sm:max-w-4xl max-h-[92vh] sm:max-h-[90vh] overflow-y-auto rounded-t-[2.5rem] sm:rounded-3xl bg-gradient-to-b from-[#1A1B41] via-[#10122E] to-[#0B0D21] border-t sm:border border-cyan-400/40 shadow-3d-card p-5 sm:p-8 space-y-6 text-white no-scrollbar"
+        className="relative w-full sm:max-w-4xl max-h-[92vh] sm:max-h-[90vh] overflow-y-auto rounded-t-[2.5rem] sm:rounded-3xl bg-gradient-to-b from-[#1A1B41] via-[#10122E] to-[#0B0D21] border-t sm:border border-cyan-400/40 shadow-3d-card p-5 sm:p-8 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:pb-8 space-y-6 text-white no-scrollbar"
         style={{
           boxShadow: '0 30px 80px -15px rgba(0, 0, 0, 0.9), 0 0 45px -5px rgba(0, 229, 255, 0.35)',
         }}

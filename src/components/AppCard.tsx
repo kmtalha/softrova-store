@@ -195,7 +195,7 @@ export default function AppCard({
                 type="button"
                 onClick={handleGetClick}
                 aria-label={`Download ${app.name}`}
-                className="relative flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2 rounded-full bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan hover:shadow-neon-cyan-lg hover:scale-105 active:scale-95 transition-all min-h-[36px]"
+                className="relative flex items-center justify-center gap-1.5 px-4 sm:px-5 py-2 rounded-full bg-cyan-pill hover:bg-cyan-pill-hover text-slate-950 font-black text-xs uppercase tracking-wider shadow-neon-cyan hover:shadow-neon-cyan-lg hover:scale-105 active:scale-95 transition-all min-h-[38px] min-w-[74px]"
               >
                 <Download size={13} className="stroke-[3]" />
                 <span>GET</span>

@@ -1,12 +1,14 @@
 {
-  "name": "Softrova App Store",
+  "name": "Softrova Solutions App Store",
   "short_name": "Softrova",
-  "description": "Next-Gen Futuristic Applications & AI Workstations",
+  "description": "Next-Gen Software, AI Workstations & Verified Applications by Softrova Solutions",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0B0D21",
   "theme_color": "#0B0D21",
   "orientation": "portrait-primary",
+  "categories": ["utilities", "productivity", "developer-tools", "business"],
   "icons": [
     {
       "src": "/softrova-logo.png",

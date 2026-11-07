@@ -116,3 +116,18 @@ input[type="password"]::-ms-clear {
   height: 0 !important;
   pointer-events: none !important;
 }
+
+/* Touch device optimizations & Instant responsiveness */
+button, a, input, select, textarea {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide scrollbars while preserving scrolling across browsers */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

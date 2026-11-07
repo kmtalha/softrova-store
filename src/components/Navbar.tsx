@@ -146,7 +146,7 @@ export default function Navbar({
         {/* Category Filter Pills */}
         <nav
           aria-label="App Categories"
-          className="flex items-center gap-2 py-2.5 overflow-x-auto no-scrollbar border-t border-slate-800/60"
+          className="flex items-center gap-2 py-2.5 overflow-x-auto no-scrollbar overscroll-x-contain touch-pan-x border-t border-slate-800/60"
         >
           <span className="text-xs font-semibold text-slate-400 shrink-0 uppercase tracking-wider flex items-center gap-1.5 mr-1 hidden sm:flex">
             <SlidersHorizontal size={12} className="text-cyan-400" /> Filters:
