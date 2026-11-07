@@ -5,7 +5,6 @@ import Navbar from '@/components/Navbar';
 import HeroCarousel from '@/components/HeroCarousel';
 import AppCard from '@/components/AppCard';
 import AppDetailModal from '@/components/AppDetailModal';
-import AiAppAdvisorModal from '@/components/AiAppAdvisorModal';
 import AppIcon from '@/components/AppIcon';
 import Footer from '@/components/Footer';
 import { DEFAULT_CATEGORIES } from '@/data/categories';
@@ -20,8 +19,7 @@ import {
   ShieldCheck,
   SearchX,
   Lock,
-  Cpu,
-  Bot
+  Cpu
 } from 'lucide-react';
 
 export default function StorefrontPage() {
@@ -31,7 +29,19 @@ export default function StorefrontPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [activeModalApp, setActiveModalApp] = useState<AppItem | null>(null);
   const [sortBy, setSortBy] = useState<'featured' | 'rating' | 'name'>('featured');
-  const [isAiAdvisorOpen, setIsAiAdvisorOpen] = useState<boolean>(false);
+
+  // Smooth scroll to catalog when top filter is clicked
+  const handleSelectCategory = (category: string) => {
+    setSelectedCategory(category);
+    setTimeout(() => {
+      const catalogEl = document.getElementById('apps-catalog');
+      if (catalogEl) {
+        const yOffset = -90;
+        const y = catalogEl.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }, 50);
+  };
 
   // Load custom apps, dynamic categories & spotlight overrides from Supabase or localStorage
   useEffect(() => {
@@ -239,7 +249,7 @@ export default function StorefrontPage() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
+        onSelectCategory={handleSelectCategory}
         categories={categories}
       />
 
@@ -256,7 +266,7 @@ export default function StorefrontPage() {
         )}
 
         {/* Store Catalog Header & Sort Controls */}
-        <section aria-labelledby="catalog-heading" className="space-y-5">
+        <section id="apps-catalog" aria-labelledby="catalog-heading" className="space-y-5 scroll-mt-28">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-cyan-500/20 pb-4">
             <div>
               <div className="flex items-center gap-2">
@@ -275,37 +285,26 @@ export default function StorefrontPage() {
               </p>
             </div>
 
-            {/* AI Advisor Button & Sort Controls */}
-            <div className="flex items-center gap-3 flex-wrap self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setIsAiAdvisorOpen(true)}
-                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-black uppercase tracking-wider shadow-neon-cyan flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 min-h-[34px]"
-              >
-                <Sparkles size={13} className="fill-amber-300 text-amber-300 animate-pulse" />
-                <span>Ask AI Agent</span>
-              </button>
-
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-slate-400 hidden xs:flex items-center gap-1">
-                  <Filter size={12} className="text-cyan-400" /> Sort:
-                </span>
-                <div className="inline-flex rounded-xl bg-[#10122E] p-1 border border-slate-700/60">
-                  {(['featured', 'rating', 'name'] as const).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setSortBy(s)}
-                      className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all min-h-[30px] flex items-center justify-center ${
-                        sortBy === s
-                          ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan-pill'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
+            {/* Sort Controls */}
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-xs text-slate-400 flex items-center gap-1">
+                <Filter size={12} className="text-cyan-400" /> Sort:
+              </span>
+              <div className="inline-flex rounded-xl bg-[#10122E] p-1 border border-slate-700/60">
+                {(['featured', 'rating', 'name'] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSortBy(s)}
+                    className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all min-h-[30px] flex items-center justify-center ${
+                      sortBy === s
+                        ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan-pill'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -400,26 +399,6 @@ export default function StorefrontPage() {
         isDownloading={downloadingAppId === activeModalApp?.id}
         downloadProgress={downloadProgress}
       />
-
-      {/* AI App Advisor Modal */}
-      <AiAppAdvisorModal
-        isOpen={isAiAdvisorOpen}
-        onClose={() => setIsAiAdvisorOpen(false)}
-        apps={apps}
-        onSelectApp={(app) => setActiveModalApp(app)}
-        onDownloadApp={handleDownload}
-      />
-
-      {/* Floating AI Agent Trigger Button on Mobile/Tablet */}
-      <button
-        type="button"
-        onClick={() => setIsAiAdvisorOpen(true)}
-        aria-label="Open Softrova AI App Advisor"
-        className="fixed bottom-6 right-5 z-40 px-3.5 py-2.5 rounded-full bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 text-white shadow-neon-cyan flex items-center gap-2 hover:scale-105 active:scale-95 transition-all border border-cyan-400/50"
-      >
-        <Sparkles size={16} className="fill-amber-300 text-amber-300 animate-pulse" />
-        <span className="text-xs font-black tracking-wide">AI Advisor</span>
-      </button>
 
       {/* Mobile Download Complete Installation Helper Banner */}
       {installedAppBanner && (

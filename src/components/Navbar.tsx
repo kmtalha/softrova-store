@@ -157,8 +157,9 @@ export default function Navbar({
             return (
               <button
                 key={category}
+                type="button"
                 onClick={() => onSelectCategory(category)}
-                className={`relative px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all shrink-0 min-h-[34px] flex items-center justify-center ${
+                className={`relative px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all shrink-0 min-h-[34px] cursor-pointer flex items-center justify-center ${
                   isActive
                     ? 'text-white bg-gradient-to-r from-cyan-500 to-blue-600 shadow-neon-cyan-pill border border-cyan-300/40'
                     : 'text-slate-300 bg-[#15173B]/70 border border-slate-700/50 hover:border-cyan-400/40 hover:text-white hover:bg-[#1A1B41]'
