@@ -22,6 +22,7 @@ import {
   Edit3,
   Download,
   Eye,
+  EyeOff,
   Key,
   AlertTriangle,
   Share2,
@@ -67,6 +68,7 @@ export default function AdminUploadPage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [emailInput, setEmailInput] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [adminUserEmail, setAdminUserEmail] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
   const [lockoutSeconds, setLockoutSeconds] = useState<number>(0);
@@ -921,7 +923,6 @@ async def upload_app(
                 alt="Softrova"
                 className="w-full h-full object-cover"
               />
-              <Sparkles size={13} className="fill-amber-400 text-amber-400 absolute top-1 right-1 pointer-events-none drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
             </div>
             <div>
               <h1 className="text-2xl font-black text-white tracking-tight">
@@ -952,19 +953,33 @@ async def upload_app(
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-300">
-                Admin Password
+              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                <span>Admin Password</span>
+                {passwordInput && (
+                  <span className="text-[10px] text-cyan-400/80 font-mono">
+                    {showPassword ? 'Visible' : 'Hidden'}
+                  </span>
+                )}
               </label>
-              <div className="relative">
+              <div className="relative flex items-center">
+                <Key size={16} className="absolute left-3.5 text-cyan-400 pointer-events-none" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
                   placeholder="••••••••••••"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 font-mono"
+                  className="w-full pl-10 pr-11 py-2.5 rounded-xl bg-[#10122E] border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 font-mono"
                 />
-                <Key size={16} className="absolute left-3 top-3 text-cyan-400" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-2.5 p-1.5 text-slate-400 hover:text-cyan-300 hover:bg-white/5 rounded-lg transition-colors focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
@@ -1056,7 +1071,6 @@ async def upload_app(
                   alt="Softrova Official Logo"
                   className="w-full h-full object-cover"
                 />
-                <Sparkles size={12} className="fill-amber-400 text-amber-400 absolute top-1 right-1 pointer-events-none drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
               </div>
               <div className="flex flex-col justify-center">
                 <div className="flex items-center gap-2">

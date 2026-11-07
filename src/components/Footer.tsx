@@ -7,8 +7,7 @@ import {
   Mail,
   Lock,
   ExternalLink,
-  ShieldCheck,
-  Sparkles
+  ShieldCheck
 } from 'lucide-react';
 import { DEFAULT_SITE_SETTINGS } from '@/data/settings';
 import { SiteSettings } from '@/types/settings';
@@ -61,7 +60,6 @@ export default function Footer() {
                   alt="Softrova"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                 />
-                <Sparkles size={10} className="fill-amber-400 text-amber-400 absolute top-0.5 right-0.5 pointer-events-none drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
               </div>
               <div className="flex flex-col justify-center leading-none">
                 <span className="text-xl font-black text-white tracking-tight group-hover:text-cyan-300 transition-colors">

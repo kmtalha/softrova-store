@@ -6,8 +6,7 @@ import {
   Search,
   SlidersHorizontal,
   X,
-  Lock,
-  Sparkles
+  Lock
 } from 'lucide-react';
 import { AppCategory } from '@/types/app';
 import { sanitizeString } from '@/lib/security';
@@ -55,7 +54,6 @@ export default function Navbar({
                 width={48}
                 height={48}
               />
-              <Sparkles size={11} className="fill-amber-400 text-amber-400 absolute top-1 right-1 pointer-events-none drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
             </div>
 
             <div className="flex flex-col justify-center leading-none">
