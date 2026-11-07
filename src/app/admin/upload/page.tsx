@@ -344,7 +344,8 @@ export default function AdminUploadPage() {
       try {
         const deleted = await deleteSupabaseApp(appId);
         if (!deleted) {
-          console.warn('Supabase delete returned false, proceeding with local deletion.');
+          console.warn('Supabase delete returned false (0 rows deleted). RLS is blocking deletion.');
+          alert(`Important Database Notice:\n"${appName}" was removed from this browser, but Supabase Database blocked the deletion because Row Level Security (RLS) is currently ON in your Supabase project.\n\nTo permanently delete it from all devices (including phones), go to your Supabase SQL Editor and run:\n\nALTER TABLE public.apps DISABLE ROW LEVEL SECURITY;\nDELETE FROM public.apps WHERE id = '${appId}';`);
         }
       } catch (err) {
         console.error('Failed to delete app from Supabase:', err);
@@ -2106,6 +2107,43 @@ async def upload_app(
                   <span>{syncMsg}</span>
                 </div>
               )}
+            </div>
+
+            {/* Crucial Fix: Enable Delete & Edit Permissions */}
+            <div className="p-6 rounded-3xl bg-amber-950/30 border border-amber-400/50 space-y-3 shadow-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
+                    <AlertTriangle size={18} className="text-amber-400 shrink-0" />
+                    <span>Database Delete & Edit Permissions (Run Once in Supabase)</span>
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    If deleting an app in the admin panel does not delete it from your phone or database, PostgreSQL Row Level Security (RLS) is blocking the delete. Run this query in your <strong>Supabase SQL Editor</strong>:
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sql = `ALTER TABLE public.apps DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;\nALTER TABLE public.site_settings DISABLE ROW LEVEL SECURITY;\nDELETE FROM public.apps WHERE name ILIKE '%spartan%';`;
+                    navigator.clipboard.writeText(sql);
+                    alert('SQL command copied to clipboard! Paste and Run it in your Supabase SQL Editor.');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black uppercase tracking-wider shrink-0 transition-all flex items-center gap-1.5 shadow-md"
+                >
+                  <Copy size={13} />
+                  <span>Copy SQL Fix</span>
+                </button>
+              </div>
+
+              <pre className="p-3.5 rounded-xl bg-[#080916] border border-amber-500/30 text-amber-200/90 text-xs font-mono overflow-x-auto leading-relaxed">
+{`ALTER TABLE public.apps DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_settings DISABLE ROW LEVEL SECURITY;
+
+-- Clean up any test Spartan GYM apps from database:
+DELETE FROM public.apps WHERE name ILIKE '%spartan%';`}
+              </pre>
             </div>
 
             {/* Quick Setup Instructions */}

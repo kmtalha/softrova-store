@@ -129,9 +129,13 @@ export async function insertSupabaseApp(app: AppItem): Promise<boolean> {
       download_url: app.downloadUrl,
     };
 
-    const { error } = await supabase.from('apps').upsert(payload);
+    const { data, error } = await supabase.from('apps').upsert(payload).select();
     if (error) {
       console.error('Failed to insert app into Supabase:', error.message);
+      return false;
+    }
+    if (!data || data.length === 0) {
+      console.warn('Upsert returned 0 affected rows in Supabase. Check RLS policies.');
       return false;
     }
     return true;
@@ -168,9 +172,14 @@ export async function deleteSupabaseApp(appId: string): Promise<boolean> {
   if (!supabase) return false;
 
   try {
-    const { error } = await supabase.from('apps').delete().eq('id', appId);
+    const { data, error } = await supabase.from('apps').delete().eq('id', appId).select();
     if (error) {
       console.error('Delete app from Supabase error:', error.message);
+      return false;
+    }
+    // Verify that at least one row was actually deleted
+    if (!data || data.length === 0) {
+      console.warn(`Supabase delete returned 0 deleted rows for app id "${appId}". RLS is likely blocking delete.`);
       return false;
     }
     return true;
