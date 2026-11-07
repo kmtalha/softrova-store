@@ -44,10 +44,10 @@ export default function Navbar({
           {/* Brand Logo & Name */}
           <Link
             href="/"
-            className="flex items-center gap-3.5 group shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-2xl"
+            className="flex items-center gap-3 group shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-2xl"
             aria-label="Softrova Home"
           >
-            <div className="relative flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-2xl overflow-hidden bg-[#1A1B41] border border-cyan-400/40 shadow-neon-cyan transition-all duration-300 group-hover:border-cyan-300 group-hover:scale-105 group-hover:shadow-neon-cyan-lg">
+            <div className="relative flex items-center justify-center w-11 h-11 sm:w-12 sm:h-12 rounded-2xl overflow-hidden bg-[#1A1B41] border border-cyan-400/40 shadow-neon-cyan transition-all duration-300 group-hover:border-cyan-300 group-hover:scale-105 group-hover:shadow-neon-cyan-lg shrink-0">
               <img
                 src="/softrova-logo.png"
                 alt="Softrova Official Logo"
@@ -55,19 +55,20 @@ export default function Navbar({
                 width={48}
                 height={48}
               />
+              <Sparkles size={11} className="fill-amber-400 text-amber-400 absolute top-1 right-1 pointer-events-none drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
             </div>
 
-            <div className="flex flex-col">
+            <div className="flex flex-col justify-center leading-none">
               <div className="flex items-center gap-1.5">
-                <span className="text-lg sm:text-xl font-black tracking-wider text-white group-hover:text-cyan-300 transition-colors">
-                  SOFTROVA
+                <span className="text-xl sm:text-2xl font-black tracking-tight text-white group-hover:text-cyan-300 transition-colors">
+                  Softrova
                 </span>
-                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
                   STORE
                 </span>
               </div>
-              <span className="text-[10px] sm:text-[11px] text-slate-400 font-medium tracking-wide">
-                Solution
+              <span className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-[0.28em] text-cyan-400 mt-1">
+                SOLUTIONS
               </span>
             </div>
           </Link>

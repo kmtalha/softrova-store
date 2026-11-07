@@ -55,19 +55,20 @@ export default function Footer() {
           {/* Col 1: Brand & Bio (4 cols) */}
           <div className="lg:col-span-4 space-y-4">
             <Link href="/" className="inline-flex items-center gap-3 group">
-              <div className="w-10 h-10 rounded-2xl overflow-hidden border border-cyan-400/40 shadow-neon-cyan shrink-0 bg-[#0B0D21]">
+              <div className="relative w-10 h-10 rounded-2xl overflow-hidden border border-cyan-400/40 shadow-neon-cyan shrink-0 bg-[#0B0D21]">
                 <img
                   src="/softrova-logo.png"
                   alt="Softrova"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                 />
+                <Sparkles size={10} className="fill-amber-400 text-amber-400 absolute top-0.5 right-0.5 pointer-events-none drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
               </div>
-              <div className="flex flex-col">
-                <span className="text-lg font-black text-white tracking-wider group-hover:text-cyan-300 transition-colors">
-                  SOFTROVA
+              <div className="flex flex-col justify-center leading-none">
+                <span className="text-xl font-black text-white tracking-tight group-hover:text-cyan-300 transition-colors">
+                  Softrova
                 </span>
-                <span className="text-[10px] text-cyan-400 font-mono tracking-widest uppercase">
-                  Solution
+                <span className="text-[10px] font-extrabold text-cyan-400 tracking-[0.26em] uppercase mt-1">
+                  SOLUTIONS
                 </span>
               </div>
             </Link>

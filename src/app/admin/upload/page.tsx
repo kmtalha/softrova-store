@@ -915,18 +915,22 @@ async def upload_app(
       <div className="min-h-screen bg-[#0B0D21] text-white bg-cyber-grid flex items-center justify-center p-4">
         <div className="w-full max-w-md p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#1A1B41] via-[#10122E] to-[#0B0D21] border border-cyan-400/40 shadow-3d-card space-y-6">
           <div className="text-center space-y-3">
-            <div className="w-16 h-16 rounded-2xl overflow-hidden border border-cyan-400/50 shadow-neon-cyan mx-auto bg-[#0B0D21]">
+            <div className="relative w-16 h-16 rounded-2xl overflow-hidden border border-cyan-400/50 shadow-neon-cyan mx-auto bg-[#0B0D21]">
               <img
                 src="/softrova-logo.png"
                 alt="Softrova"
                 className="w-full h-full object-cover"
               />
+              <Sparkles size={13} className="fill-amber-400 text-amber-400 absolute top-1 right-1 pointer-events-none drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
             </div>
             <div>
-              <h1 className="text-xl font-black text-white tracking-wide">
-                Softrova Admin Authentication
+              <h1 className="text-2xl font-black text-white tracking-tight">
+                Softrova
               </h1>
-              <p className="text-xs text-slate-400 mt-1">
+              <span className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-cyan-400 block mt-0.5">
+                SOLUTIONS
+              </span>
+              <p className="text-xs text-slate-400 mt-2">
                 Enter your Supabase administrator credentials to manage the store.
               </p>
             </div>
@@ -1046,17 +1050,26 @@ async def upload_app(
         <div className="relative rounded-3xl p-5 sm:p-8 bg-gradient-to-r from-[#1A1B41] via-[#15173B] to-[#0B0D21] border border-cyan-400/30 shadow-3d-card space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5 sm:gap-4">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden border border-cyan-400/50 shadow-neon-cyan shrink-0 bg-[#0B0D21]">
+              <div className="relative w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden border border-cyan-400/50 shadow-neon-cyan shrink-0 bg-[#0B0D21]">
                 <img
                   src="/softrova-logo.png"
                   alt="Softrova Official Logo"
                   className="w-full h-full object-cover"
                 />
+                <Sparkles size={12} className="fill-amber-400 text-amber-400 absolute top-1 right-1 pointer-events-none drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]" />
               </div>
-              <div>
-                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight flex items-center gap-2">
-                  Softrova Administration Portal
-                </h1>
+              <div className="flex flex-col justify-center">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight">
+                    Softrova
+                  </h1>
+                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                    ADMIN
+                  </span>
+                </div>
+                <span className="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-[0.28em] text-cyan-400 mt-0.5 mb-1">
+                  SOLUTIONS
+                </span>
                 <p className="text-xs sm:text-sm text-slate-300">
                   Manage applications, control Softrova Spotlight, create categories, and customize corporate footer.
                 </p>
