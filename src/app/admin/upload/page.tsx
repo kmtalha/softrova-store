@@ -30,7 +30,8 @@ import {
   Zap,
   FolderPlus,
   Database,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
 import { AppItem } from '@/types/app';
 import { SiteSettings } from '@/types/settings';
@@ -296,12 +297,19 @@ export default function AdminUploadPage() {
   };
 
   const handleLogout = async () => {
-    const supabase = getSupabase();
-    if (supabase) {
-      await supabase.auth.signOut();
+    try {
+      const supabase = getSupabase();
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+      sessionStorage.removeItem('softrova_admin_auth');
+    } catch (e) {
+      console.error('Logout error:', e);
     }
     setIsAuthenticated(false);
     setAdminUserEmail('');
+    setEmailInput('');
+    setPasswordInput('');
   };
 
   // SPOTLIGHT CONTROLLER: Toggle Featured status on any app
@@ -995,7 +1003,7 @@ async def upload_app(
     <div className="min-h-screen bg-[#0B0D21] text-white bg-cyber-grid py-6 sm:py-10 px-3 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8">
         
-        {/* Top Breadcrumb & Lock Status */}
+        {/* Top Breadcrumb & Actions Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/"
@@ -1005,7 +1013,7 @@ async def upload_app(
             <span>Return to Storefront</span>
           </Link>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={handleDownloadStoreData}
@@ -1016,43 +1024,53 @@ async def upload_app(
               <span>Download Store Data</span>
             </button>
 
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold font-mono">
-              <Lock size={11} />
-              <span>SESSION SECURE</span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold font-mono">
+              <Lock size={12} />
+              <span>{adminUserEmail ? adminUserEmail : 'ADMIN SECURE'}</span>
             </span>
+
+            {/* Prominent Log Out Button */}
             <button
               type="button"
-              onClick={() => {
-                try {
-                  sessionStorage.removeItem('softrova_admin_auth');
-                } catch {}
-                setIsAuthenticated(false);
-              }}
-              className="text-[11px] text-slate-400 hover:text-rose-400 underline ml-2"
+              onClick={handleLogout}
+              title="Log out and secure administration session"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-white border border-rose-500/30 hover:border-rose-400 text-xs font-bold transition-all min-h-[36px] shadow-sm hover:scale-105 active:scale-95"
             >
-              Lock Console
+              <LogOut size={14} />
+              <span>Log Out</span>
             </button>
           </div>
         </div>
 
         {/* Header Hero */}
         <div className="relative rounded-3xl p-5 sm:p-8 bg-gradient-to-r from-[#1A1B41] via-[#15173B] to-[#0B0D21] border border-cyan-400/30 shadow-3d-card space-y-4">
-          <div className="flex items-center gap-3.5 sm:gap-4">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden border border-cyan-400/50 shadow-neon-cyan shrink-0 bg-[#0B0D21]">
-              <img
-                src="/softrova-logo.png"
-                alt="Softrova Official Logo"
-                className="w-full h-full object-cover"
-              />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5 sm:gap-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden border border-cyan-400/50 shadow-neon-cyan shrink-0 bg-[#0B0D21]">
+                <img
+                  src="/softrova-logo.png"
+                  alt="Softrova Official Logo"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight flex items-center gap-2">
+                  Softrova Administration Portal
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-300">
+                  Manage applications, control Softrova Spotlight, create categories, and customize corporate footer.
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-black text-white tracking-tight flex items-center gap-2">
-                Softrova Administration Portal
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-300">
-                Manage applications, control Softrova Spotlight, create categories, and customize corporate footer.
-              </p>
-            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white border border-rose-500/40 text-xs font-bold transition-all shadow-sm shrink-0 hover:scale-105 active:scale-95"
+            >
+              <LogOut size={14} />
+              <span>Log Out</span>
+            </button>
           </div>
 
           {/* Admin Navigation Tabs (4 Tabs) */}
