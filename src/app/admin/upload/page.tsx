@@ -169,17 +169,6 @@ export default function AdminUploadPage() {
             }
           });
 
-          // Fetch Supabase Apps
-          const sbApps = await fetchSupabaseApps();
-          if (sbApps && sbApps.length > 0) {
-            setAppsList(sbApps);
-            const map: Record<string, boolean> = {};
-            sbApps.forEach((a) => {
-              if (a.featured) map[a.id] = true;
-            });
-            setSpotlightMap(map);
-          }
-
           // Fetch Supabase Categories
           const sbCats = await fetchSupabaseCategories();
           if (sbCats && sbCats.length > 0) {
@@ -194,31 +183,62 @@ export default function AdminUploadPage() {
           if (Array.isArray(parsed) && parsed.length > 0) setCategories(parsed);
         }
 
-        // 2. Fallback Apps
-        const storedCustom = localStorage.getItem('softrova_custom_apps');
-        const customApps: AppItem[] = storedCustom ? JSON.parse(storedCustom) : [];
-        const combined = Array.isArray(customApps) && customApps.length > 0
-          ? [...customApps, ...INITIAL_APPS]
-          : INITIAL_APPS;
+        let baseApps: AppItem[] = [];
 
-        // 3. Fallback Spotlight Map
-        const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
-        let currentMap: Record<string, boolean> = {};
-        if (storedSpotlight) {
-          currentMap = JSON.parse(storedSpotlight);
-        } else {
-          combined.forEach((a) => {
-            if (a.featured) currentMap[a.id] = true;
-          });
+        // 1. Fetch Supabase Apps if connected
+        if (supabase) {
+          const sbApps = await fetchSupabaseApps();
+          if (sbApps && sbApps.length > 0) {
+            baseApps = sbApps;
+          }
         }
-        setSpotlightMap((prev) => (Object.keys(prev).length > 0 ? prev : currentMap));
-        setAppsList((prev) =>
-          prev.length > INITIAL_APPS.length
-            ? prev
-            : combined.map((a) => ({
-                ...a,
-                featured: currentMap[a.id] !== undefined ? currentMap[a.id] : a.featured,
-              }))
+
+        // 2. If no Supabase apps, assemble from custom apps and initial apps
+        if (baseApps.length === 0) {
+          const storedCustom = localStorage.getItem('softrova_custom_apps');
+          const customApps: AppItem[] = storedCustom ? JSON.parse(storedCustom) : [];
+          const appMap = new Map<string, AppItem>();
+          INITIAL_APPS.forEach((app) => appMap.set(app.id, app));
+          if (Array.isArray(customApps)) {
+            customApps.forEach((app) => appMap.set(app.id, app));
+          }
+          baseApps = Array.from(appMap.values());
+        }
+
+        // 3. Apply Local Edits Cache (softrova_edited_apps)
+        try {
+          const storedEdited = localStorage.getItem('softrova_edited_apps');
+          if (storedEdited) {
+            const editedMap: Record<string, AppItem> = JSON.parse(storedEdited);
+            baseApps = baseApps.map((a) => (editedMap[a.id] ? { ...a, ...editedMap[a.id] } : a));
+          }
+        } catch {}
+
+        // 4. Filter out any Deleted Apps (softrova_deleted_app_ids)
+        try {
+          const storedDeleted = localStorage.getItem('softrova_deleted_app_ids');
+          if (storedDeleted) {
+            const deletedIds: string[] = JSON.parse(storedDeleted);
+            if (Array.isArray(deletedIds) && deletedIds.length > 0) {
+              baseApps = baseApps.filter((a) => !deletedIds.includes(a.id));
+            }
+          }
+        } catch {}
+
+        // 5. Build and synchronize Spotlight Map
+        const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
+        const currentMap: Record<string, boolean> = storedSpotlight ? JSON.parse(storedSpotlight) : {};
+        baseApps.forEach((a) => {
+          if (currentMap[a.id] === undefined && a.featured) {
+            currentMap[a.id] = true;
+          }
+        });
+        setSpotlightMap(currentMap);
+        setAppsList(
+          baseApps.map((a) => ({
+            ...a,
+            featured: currentMap[a.id] !== undefined ? currentMap[a.id] : a.featured,
+          }))
         );
 
         // 4. Site Settings
@@ -319,13 +339,36 @@ export default function AdminUploadPage() {
   const handleDeleteApp = async (appId: string, appName: string) => {
     if (!confirm(`Are you sure you want to remove "${appName}" from Softrova Store?`)) return;
 
+    // 1. Delete from Supabase Database if connected
     if (supabaseConnected) {
-      await deleteSupabaseApp(appId);
+      try {
+        const deleted = await deleteSupabaseApp(appId);
+        if (!deleted) {
+          console.warn('Supabase delete returned false, proceeding with local deletion.');
+        }
+      } catch (err) {
+        console.error('Failed to delete app from Supabase:', err);
+      }
     }
 
+    // 2. Immediately update in-memory state
     setAppsList((prev) => prev.filter((a) => a.id !== appId));
+    setSpotlightMap((prev) => {
+      const copy = { ...prev };
+      delete copy[appId];
+      return copy;
+    });
 
+    // 3. Persist deletion in softrova_deleted_app_ids so storefront permanently removes it
     try {
+      const storedDeleted = localStorage.getItem('softrova_deleted_app_ids');
+      const deletedIds: string[] = storedDeleted ? JSON.parse(storedDeleted) : [];
+      if (!deletedIds.includes(appId)) {
+        deletedIds.push(appId);
+        localStorage.setItem('softrova_deleted_app_ids', JSON.stringify(deletedIds));
+      }
+
+      // Clean from custom apps
       const stored = localStorage.getItem('softrova_custom_apps');
       if (stored) {
         const customApps = JSON.parse(stored);
@@ -336,10 +379,28 @@ export default function AdminUploadPage() {
           );
         }
       }
-    } catch {}
 
-    setSpotlightSuccessMsg(`"${appName}" was removed from the store.`);
-    setTimeout(() => setSpotlightSuccessMsg(''), 3000);
+      // Clean from edited apps map
+      const storedEdited = localStorage.getItem('softrova_edited_apps');
+      if (storedEdited) {
+        const editedMap = JSON.parse(storedEdited);
+        delete editedMap[appId];
+        localStorage.setItem('softrova_edited_apps', JSON.stringify(editedMap));
+      }
+
+      // Clean from spotlight map
+      const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
+      if (storedSpotlight) {
+        const spotMap = JSON.parse(storedSpotlight);
+        delete spotMap[appId];
+        localStorage.setItem('softrova_spotlight_map', JSON.stringify(spotMap));
+      }
+    } catch (e) {
+      console.error('Error synchronizing deletion to storage:', e);
+    }
+
+    setSpotlightSuccessMsg(`"${appName}" was successfully deleted from Softrova Store & Database.`);
+    setTimeout(() => setSpotlightSuccessMsg(''), 4000);
   };
 
   // Open Edit App Modal
@@ -392,8 +453,23 @@ export default function AdminUploadPage() {
         [updatedApp.id]: !!updatedApp.featured,
       }));
 
-      // Update localStorage custom apps
+      // Update localStorage custom apps and edit cache
       try {
+        // If it was previously marked as deleted, remove it from deleted
+        const storedDeleted = localStorage.getItem('softrova_deleted_app_ids');
+        if (storedDeleted) {
+          const deletedIds: string[] = JSON.parse(storedDeleted);
+          const filtered = deletedIds.filter((id) => id !== updatedApp.id);
+          localStorage.setItem('softrova_deleted_app_ids', JSON.stringify(filtered));
+        }
+
+        // Save in softrova_edited_apps map so storefront immediately reflects all edits
+        const storedEdited = localStorage.getItem('softrova_edited_apps');
+        const editedMap = storedEdited ? JSON.parse(storedEdited) : {};
+        editedMap[updatedApp.id] = updatedApp;
+        localStorage.setItem('softrova_edited_apps', JSON.stringify(editedMap));
+
+        // Update softrova_custom_apps
         const stored = localStorage.getItem('softrova_custom_apps');
         const customApps = stored ? JSON.parse(stored) : [];
         if (Array.isArray(customApps)) {

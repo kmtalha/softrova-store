@@ -169,8 +169,13 @@ export async function deleteSupabaseApp(appId: string): Promise<boolean> {
 
   try {
     const { error } = await supabase.from('apps').delete().eq('id', appId);
-    return !error;
-  } catch {
+    if (error) {
+      console.error('Delete app from Supabase error:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Delete app exception:', err);
     return false;
   }
 }

@@ -5,6 +5,8 @@ import Navbar from '@/components/Navbar';
 import HeroCarousel from '@/components/HeroCarousel';
 import AppCard from '@/components/AppCard';
 import AppDetailModal from '@/components/AppDetailModal';
+import AiAppAdvisorModal from '@/components/AiAppAdvisorModal';
+import AppIcon from '@/components/AppIcon';
 import Footer from '@/components/Footer';
 import { DEFAULT_CATEGORIES } from '@/data/categories';
 import { INITIAL_APPS } from '@/data/apps';
@@ -18,7 +20,8 @@ import {
   ShieldCheck,
   SearchX,
   Lock,
-  Cpu
+  Cpu,
+  Bot
 } from 'lucide-react';
 
 export default function StorefrontPage() {
@@ -28,6 +31,7 @@ export default function StorefrontPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [activeModalApp, setActiveModalApp] = useState<AppItem | null>(null);
   const [sortBy, setSortBy] = useState<'featured' | 'rating' | 'name'>('featured');
+  const [isAiAdvisorOpen, setIsAiAdvisorOpen] = useState<boolean>(false);
 
   // Load custom apps, dynamic categories & spotlight overrides from Supabase or localStorage
   useEffect(() => {
@@ -47,30 +51,55 @@ export default function StorefrontPage() {
           }
         }
 
-        // 2. Try loading apps from Supabase
+        // 2. Load apps from Supabase or fallback
+        let baseApps: AppItem[] = [];
         const sbApps = await fetchSupabaseApps();
         if (sbApps && sbApps.length > 0) {
-          setApps(sbApps);
-          return;
+          baseApps = sbApps;
+        } else {
+          const stored = localStorage.getItem('softrova_custom_apps');
+          const customApps: AppItem[] = stored ? JSON.parse(stored) : [];
+          const appMap = new Map<string, AppItem>();
+          INITIAL_APPS.forEach((app) => appMap.set(app.id, app));
+          if (Array.isArray(customApps)) {
+            customApps.forEach((app) => appMap.set(app.id, app));
+          }
+          baseApps = Array.from(appMap.values());
         }
 
-        // Fallback to local storage & initial apps
-        const stored = localStorage.getItem('softrova_custom_apps');
-        const customApps: AppItem[] = stored ? JSON.parse(stored) : [];
-        let combined = Array.isArray(customApps) && customApps.length > 0
-          ? [...customApps, ...INITIAL_APPS]
-          : INITIAL_APPS;
+        // 3. Apply Local Edits Cache (softrova_edited_apps)
+        try {
+          const storedEdited = localStorage.getItem('softrova_edited_apps');
+          if (storedEdited) {
+            const editedMap: Record<string, AppItem> = JSON.parse(storedEdited);
+            baseApps = baseApps.map((a) => (editedMap[a.id] ? { ...a, ...editedMap[a.id] } : a));
+          }
+        } catch {}
 
-        const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
-        if (storedSpotlight) {
-          const featMap: Record<string, boolean> = JSON.parse(storedSpotlight);
-          combined = combined.map((app) => ({
-            ...app,
-            featured: featMap[app.id] !== undefined ? featMap[app.id] : app.featured,
-          }));
-        }
+        // 4. Filter out any Deleted Apps (softrova_deleted_app_ids)
+        try {
+          const storedDeleted = localStorage.getItem('softrova_deleted_app_ids');
+          if (storedDeleted) {
+            const deletedIds: string[] = JSON.parse(storedDeleted);
+            if (Array.isArray(deletedIds) && deletedIds.length > 0) {
+              baseApps = baseApps.filter((a) => !deletedIds.includes(a.id));
+            }
+          }
+        } catch {}
 
-        setApps(combined);
+        // 5. Apply spotlight map
+        try {
+          const storedSpotlight = localStorage.getItem('softrova_spotlight_map');
+          if (storedSpotlight) {
+            const featMap: Record<string, boolean> = JSON.parse(storedSpotlight);
+            baseApps = baseApps.map((app) => ({
+              ...app,
+              featured: featMap[app.id] !== undefined ? featMap[app.id] : app.featured,
+            }));
+          }
+        } catch {}
+
+        setApps(baseApps);
       } catch (e) {
         console.error('Failed to parse store data:', e);
       }
@@ -246,26 +275,37 @@ export default function StorefrontPage() {
               </p>
             </div>
 
-            {/* Sort Controls */}
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <span className="text-xs text-slate-400 flex items-center gap-1">
-                <Filter size={12} className="text-cyan-400" /> Sort:
-              </span>
-              <div className="inline-flex rounded-xl bg-[#10122E] p-1 border border-slate-700/60">
-                {(['featured', 'rating', 'name'] as const).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setSortBy(s)}
-                    className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all min-h-[30px] flex items-center justify-center ${
-                      sortBy === s
-                        ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan-pill'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
+            {/* AI Advisor Button & Sort Controls */}
+            <div className="flex items-center gap-3 flex-wrap self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setIsAiAdvisorOpen(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-indigo-500 text-white text-xs font-black uppercase tracking-wider shadow-neon-cyan flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 min-h-[34px]"
+              >
+                <Sparkles size={13} className="fill-amber-300 text-amber-300 animate-pulse" />
+                <span>Ask AI Agent</span>
+              </button>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-400 hidden xs:flex items-center gap-1">
+                  <Filter size={12} className="text-cyan-400" /> Sort:
+                </span>
+                <div className="inline-flex rounded-xl bg-[#10122E] p-1 border border-slate-700/60">
+                  {(['featured', 'rating', 'name'] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setSortBy(s)}
+                      className={`px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold capitalize transition-all min-h-[30px] flex items-center justify-center ${
+                        sortBy === s
+                          ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-neon-cyan-pill'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -360,6 +400,26 @@ export default function StorefrontPage() {
         isDownloading={downloadingAppId === activeModalApp?.id}
         downloadProgress={downloadProgress}
       />
+
+      {/* AI App Advisor Modal */}
+      <AiAppAdvisorModal
+        isOpen={isAiAdvisorOpen}
+        onClose={() => setIsAiAdvisorOpen(false)}
+        apps={apps}
+        onSelectApp={(app) => setActiveModalApp(app)}
+        onDownloadApp={handleDownload}
+      />
+
+      {/* Floating AI Agent Trigger Button on Mobile/Tablet */}
+      <button
+        type="button"
+        onClick={() => setIsAiAdvisorOpen(true)}
+        aria-label="Open Softrova AI App Advisor"
+        className="fixed bottom-6 right-5 z-40 px-3.5 py-2.5 rounded-full bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 text-white shadow-neon-cyan flex items-center gap-2 hover:scale-105 active:scale-95 transition-all border border-cyan-400/50"
+      >
+        <Sparkles size={16} className="fill-amber-300 text-amber-300 animate-pulse" />
+        <span className="text-xs font-black tracking-wide">AI Advisor</span>
+      </button>
 
       {/* Mobile Download Complete Installation Helper Banner */}
       {installedAppBanner && (

@@ -71,27 +71,42 @@ ALTER TABLE public.apps ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 
 -- 6. RLS Policies: PUBLIC CAN READ EVERYTHING
+DROP POLICY IF EXISTS "Public Read Categories" ON public.categories;
 CREATE POLICY "Public Read Categories" ON public.categories
     FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Public Read Apps" ON public.apps;
 CREATE POLICY "Public Read Apps" ON public.apps
     FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Public Read Settings" ON public.site_settings;
 CREATE POLICY "Public Read Settings" ON public.site_settings
     FOR SELECT USING (true);
 
 -- 7. RLS Policies: ONLY AUTHENTICATED ADMINS CAN MODIFY
+DROP POLICY IF EXISTS "Admin Insert Categories" ON public.categories;
 CREATE POLICY "Admin Insert Categories" ON public.categories
     FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Admin Delete Categories" ON public.categories;
 CREATE POLICY "Admin Delete Categories" ON public.categories
     FOR DELETE USING (auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Admin Insert Apps" ON public.apps;
 CREATE POLICY "Admin Insert Apps" ON public.apps
     FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Admin Update Apps" ON public.apps;
 CREATE POLICY "Admin Update Apps" ON public.apps
     FOR UPDATE USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Admin Delete Apps" ON public.apps;
+CREATE POLICY "Admin Delete Apps" ON public.apps
+    FOR DELETE USING (auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Admin Modify Settings" ON public.site_settings;
+CREATE POLICY "Admin Modify Settings" ON public.site_settings
+    FOR ALL USING (auth.role() = 'authenticated');
 
 -- 8. Storage Buckets Creation (for App Icons, Screenshots, and Binaries)
 INSERT INTO storage.buckets (id, name, public) VALUES 
@@ -101,22 +116,32 @@ INSERT INTO storage.buckets (id, name, public) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage Policies: Public Can View Media
+DROP POLICY IF EXISTS "Public Access App Icons" ON storage.objects;
 CREATE POLICY "Public Access App Icons" ON storage.objects
     FOR SELECT USING (bucket_id = 'app-icons');
 
+DROP POLICY IF EXISTS "Public Access App Screenshots" ON storage.objects;
 CREATE POLICY "Public Access App Screenshots" ON storage.objects
     FOR SELECT USING (bucket_id = 'app-screenshots');
 
+DROP POLICY IF EXISTS "Public Access App Binaries" ON storage.objects;
 CREATE POLICY "Public Access App Binaries" ON storage.objects
     FOR SELECT USING (bucket_id = 'app-binaries');
 
--- Storage Policies: Only Authenticated Admins Can Upload
+-- Storage Policies: Only Authenticated Admins Can Upload & Delete
+DROP POLICY IF EXISTS "Admin Upload App Icons" ON storage.objects;
 CREATE POLICY "Admin Upload App Icons" ON storage.objects
     FOR INSERT WITH CHECK (bucket_id = 'app-icons' AND auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Admin Upload App Screenshots" ON storage.objects;
 CREATE POLICY "Admin Upload App Screenshots" ON storage.objects
     FOR INSERT WITH CHECK (bucket_id = 'app-screenshots' AND auth.role() = 'authenticated');
 
+DROP POLICY IF EXISTS "Admin Upload App Binaries" ON storage.objects;
 CREATE POLICY "Admin Upload App Binaries" ON storage.objects
     FOR INSERT WITH CHECK (bucket_id = 'app-binaries' AND auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Admin Delete Storage Objects" ON storage.objects;
+CREATE POLICY "Admin Delete Storage Objects" ON storage.objects
+    FOR DELETE USING (auth.role() = 'authenticated');
 `;
